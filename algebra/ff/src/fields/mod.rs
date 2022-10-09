@@ -214,15 +214,15 @@ pub trait Field:
     }
 
     fn batch_product_in_place(selfs: &mut [Self], others: &[Self]) {
-        for (a, b) in ark_std::cfg_iter_mut!(selfs).zip(others.iter()) {
-          *a *= b;
-        }
+        ark_std::cfg_iter_mut!(selfs)
+            .zip(ark_std::cfg_iter!(others))
+            .for_each(|(a, b)| *a /= b);
     }
 
     fn batch_division_in_place(selfs: &mut [Self], others: &[Self]) {
-        for (a, b) in ark_std::cfg_iter_mut!(selfs).zip(others.iter()) {
-          *a /= b;
-        }
+        ark_std::cfg_iter_mut!(selfs)
+            .zip(ark_std::cfg_iter!(others))
+            .for_each(|(a, b)| *a /= b);
     }
 
     /// Replace `[x1, x2, ... , xn]` with `[x1, x1*x2, ... , x1*x2*...*xn]`

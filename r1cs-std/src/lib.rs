@@ -1,13 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 //! This crate implements common "gadgets" that make
 //! programming rank-1 constraint systems easier.
-#![deny(
-    warnings,
-    unused,
-    future_incompatible,
-    nonstandard_style,
-    rust_2018_idioms
-)]
+//#![deny(
+//    warnings,
+//    unused,
+//    future_incompatible,
+//    nonstandard_style,
+//    rust_2018_idioms
+//)]
 #![allow(clippy::op_ref)]
 
 #[macro_use]

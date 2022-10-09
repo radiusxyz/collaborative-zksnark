@@ -39,6 +39,11 @@ merlin = "3"
 sha2 = "0.9"
 blake2 = "0.9"
 
+[features]
+default = ["std", "parallel"]
+std = ["ark-ec/std", "ark-ff/std", "ark-poly/std", "ark-std/std", "ark-poly-commit/std"]
+parallel = [ "rayon", "ark-ec/parallel", "ark-ff/parallel", "ark-poly/parallel", "ark-std/parallel", "ark-poly-commit/parallel" ]
+
 [[bin]]
 name = "client"
 path = "src/client.rs"
