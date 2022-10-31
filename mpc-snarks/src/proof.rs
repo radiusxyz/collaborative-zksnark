@@ -64,6 +64,34 @@ mod squarings {
         }
     }
 
+    impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF>
+        for RepeatedSquaringCircuit<ConstraintF>
+    {
+        fn generate_constraints(
+            self,
+            cs: ConstraintSystemRef<ConstraintF>,
+        ) -> Result<(), SynthesisError> {
+            let mut vars: Vec<Variable> = self
+                .chain
+                .iter()
+                .take(self.squarings())
+                .map(|o| cs.new_witness_variable(|| o.ok_or(SynthesisError::AssignmentMissing)))
+                .collect::<Result<_, _>>()?;
+            vars.push(cs.new_input_variable(|| {
+                self.chain
+                    .last()
+                    .unwrap()
+                    .ok_or(SynthesisError::AssignmentMissing)
+            })?);
+
+            for i in 0..self.squarings() {
+                cs.enforce_constraint(lc!() + vars[i], lc!() + vars[i], lc!() + vars[i + 1])?;
+            }
+
+            Ok(())
+        }
+    }
+
     pub mod groth {
         use super::*;
         use crate::ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof};
@@ -315,33 +343,7 @@ mod squarings {
         }
     }
 
-    impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF>
-        for RepeatedSquaringCircuit<ConstraintF>
-    {
-        fn generate_constraints(
-            self,
-            cs: ConstraintSystemRef<ConstraintF>,
-        ) -> Result<(), SynthesisError> {
-            let mut vars: Vec<Variable> = self
-                .chain
-                .iter()
-                .take(self.squarings())
-                .map(|o| cs.new_witness_variable(|| o.ok_or(SynthesisError::AssignmentMissing)))
-                .collect::<Result<_, _>>()?;
-            vars.push(cs.new_input_variable(|| {
-                self.chain
-                    .last()
-                    .unwrap()
-                    .ok_or(SynthesisError::AssignmentMissing)
-            })?);
-
-            for i in 0..self.squarings() {
-                cs.enforce_constraint(lc!() + vars[i], lc!() + vars[i], lc!() + vars[i + 1])?;
-            }
-
-            Ok(())
-        }
-    }
+    
 }
 
 #[derive(Debug, StructOpt)]
