@@ -7,6 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+#zeroknight
+ark-crypto-primitives = { path = "../crypto-primitives", version = "^0.2.0", default-features = false }
+
 ark-ff = { path = "../algebra/ff", version = "0.2.0", default-features = false }
 ark-bls12-377 = { path = "../curves/bls12_377", version = "0.2.0", default-features = false, features = ["curve"] }
 ark-ec = { path = "../algebra/ec", version = "0.2.0", default-features = false }
