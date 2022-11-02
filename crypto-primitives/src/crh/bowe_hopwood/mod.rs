@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use super::pedersen;
 use crate::crh::FixedLengthCRH;
 use ark_ec::{
-    twisted_edwards_extended::GroupProjective as TEProjective, ProjectiveCurve, TEModelParameters,
+    twisted_edwards_extended::GroupProjective as TEProjective, ProjectiveCurve, TEModelParameters,    
 };
 use ark_ff::{biginteger::BigInteger, fields::PrimeField};
 use ark_std::cfg_chunks;

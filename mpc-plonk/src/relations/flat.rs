@@ -334,7 +334,8 @@ mod tests {
         for steps in &[1, 3] {
             let c = PlonkCircuit::<F>::new_squaring_circuit(*steps, None);
             let d = Domains::from_circuit(&c);
-            let polys = CircuitLayout::from_circuit(&c, &d);
+            //let polys = CircuitLayout::from_circuit(&c, &d);  // zeroknight
+            let polys = CircuitLayout::from_circuit(&c);
             polys.check_connection_degree(3);
         }
     }
@@ -346,7 +347,9 @@ mod tests {
             let res = (0..*steps).fold(start, |a, _| a * a);
             let public: HashMap<String, F> = vec![("out".to_owned(), res)].into_iter().collect();
             let d = Domains::from_circuit(&c);
-            let polys = CircuitLayout::from_circuit(&c, &d);
+            //let polys = CircuitLayout::from_circuit(&c, &d);  // zeroknight
+            let polys = CircuitLayout::from_circuit(&c);
+
             polys.check_connection_degree(3);
             polys.check(&public);
         }
