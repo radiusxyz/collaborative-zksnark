@@ -1,10 +1,11 @@
-use rand;
+// use rand;        // @zeroknight added ark_std::
+use ark_std::rand;
 
 #[macro_use]
 extern crate criterion;
 
 use criterion::Criterion;
-use crypto_primitives::prf::*;
+use ark_crypto_primitives::prf::*;  // @zeroknight added ark_
 use ark_std::rand::Rng;
 
 fn blake2s_prf_eval(c: &mut Criterion) {
