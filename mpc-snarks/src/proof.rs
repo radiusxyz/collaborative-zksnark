@@ -24,7 +24,8 @@ mod groth;
 mod marlin;
 mod silly;
 
-mod merkle;
+// zeroknight
+mod poseidon;
 
 const TIMED_SECTION_LABEL: &str = "timed section";
 
