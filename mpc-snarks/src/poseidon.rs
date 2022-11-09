@@ -1,12 +1,12 @@
 use ark_crypto_primitives::{
     crh::poseidon::{PoseidonCRH, Poseidon, PoseidonRoundParams},
     crh::poseidon::sbox::PoseidonSbox,
-    crh::FixedLengthCRH,
+    crh::FixedLengthCRH, FixedLengthCRHGadget,
 };
 
 // constraints
 use ark_crypto_primitives::{
-    crh::poseidon::constraints::PoseidonRoundParamsVar,
+    crh::poseidon::constraints::{PoseidonRoundParamsVar, PoseidonCRHGadget},
 };
 
 use ark_ff::{Field, PrimeField};
@@ -20,6 +20,11 @@ use ark_relations::{
 // [Important!!] ark-bls12-377 and bls12-381 doesn't work!!!! by zeroknight
 use ark_ed_on_bls12_381::Fq;
 
+// 
+use ark_r1cs_std::{alloc::AllocVar, prelude::*};
+//use ark_ff::ToConstraintField;
+//use ark_std::vec;
+
 
 pub type CRHFunction = PoseidonCRH<Fq, PParams>;
 
@@ -27,18 +32,27 @@ pub type CRHParam = <CRHFunction as FixedLengthCRH>::Parameters;
 pub type CRHInput = [u8; 32];
 pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
 
+/*
 #[derive(Clone)]
-pub struct PoseidonCircuit<F: Field> {
+pub struct PoseidonCircuit<F: Field> { // Field vs Primefield with PoseidonRoundParamsVar
     pub a: Option<F>,
     pub param: CRHParam,
     pub input: CRHInput,
     pub output: CRHOutput,
 }
+*/
+#[derive(Clone)]
+pub struct PoseidonCircuit {
+    pub param: CRHParam,
+    pub input: CRHInput,
+    pub output: CRHOutput,
+}
 
-impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for PoseidonCircuit<ConstraintF> {
+
+impl ConstraintSynthesizer<Fq> for PoseidonCircuit {
     fn generate_constraints (
         self,
-        cs: ConstraintSystemRef<ConstraintF>,
+        cs: ConstraintSystemRef<Fq>,
     ) -> Result<(), SynthesisError> {
 
 /*
@@ -62,6 +76,10 @@ where
             ark_relations::ns!(cs, "gadget_parameters"),
             || { Ok(&self.param) }
         ).unwrap();    // new_input from a trait 'AllocVar' 
+
+
+        // build a circuit
+        poseidon_circuit_helper(&self.input, &self.output, cs, pos_param_var)?;
 
         Ok(())
     }
@@ -322,10 +340,48 @@ pub fn tryout_poseidon() {
     let inp = [32u8; 32];
     let out = <CRHFunction as FixedLengthCRH>::evaluate(&parameter, &inp).unwrap();
 
+    // build the circuit
+    let circuit = PoseidonCircuit {
+        // pub type CRHFunction = PoseidonCRH<Fq, PParams>;
+        param: parameter.clone(),   // pub type CRHParam = <CRHFunction as FixedLengthCRH>::Parameters;
+        input: inp, // pub type CRHInput = [u8; 32];
+        output: out,    // pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
+    };
+
     println!("{}", out);
 
+}
 
+pub fn poseidon_circuit_helper(
+    input: &[u8; 32],
+    output: &CRHOutput, //<CRHFunction as FixedLengthCRH>::Output;
+    cs: ConstraintSystemRef<Fq>, // A shared reference to a constraint system that can be stored in high level variables.
+                                    // Fq : ark_bls12_381::fields::fr  |   pub type Fr = Fp256<FrParameters>
+    // struct PoseidonRoundParamsVar<F: PrimeField, P: PoseidonRoundParams<F>>
+    pos_param_var: PoseidonRoundParamsVar<Fq, PParams>,
+) -> Result<(), SynthesisError> {
 
+    // Allocate parameter for Poseidon
+    let parameters_var = pos_param_var;
+
+    // Allocation inputs    .. what about witness or public input?!
+    //ark_r1cs_std::bits::uint8::UInt8
+        // pub fn new_witness_vec(cs: impl Into<Namespace<F>>, values: &[impl Into<Option<u8>> + Copy]) -> Result<Vec<Self>, SynthesisError>
+    let intput_var = UInt8::new_witness_vec(ark_relations::ns!(cs, "declare_input"), input)?;
+
+    // Allocate output which will be evaluated in the circuit
+    let output_var = PoseidonCRHGadget::evaluate(&parameters_var, &intput_var)?;
+
+    // Allocate actual output from outside of the circuit
+    let actual_out_var = <PoseidonCRHGadget<Fq, PParams> as FixedLengthCRHGadget<_, Fq>>::OutputVar::new_input(
+        ark_relations::ns!(cs, "declare_output"),
+        || Ok(output),
+    )?;
+
+    // Constraint to compare the outputs
+    output_var.enforce_equal(&actual_out_var)?;
+
+    Ok(())
 }
 
 #[test]

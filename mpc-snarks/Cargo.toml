@@ -9,18 +9,19 @@ edition = "2018"
 [dependencies]
 #zeroknight
 ark-crypto-primitives = { path = "../crypto-primitives", version = "^0.2.0", default-features = false, features = ["r1cs"]}
+ark-r1cs-std = { path="../r1cs-std", version="^0.2.0", default-features = false }
 
-ark-ff = { path = "../algebra/ff", version = "0.2.0", default-features = false, features = ["asm"]  }                               #zeroknight - add 'asm' to build with Contraints
+ark-ff = { path = "../algebra/ff", version = "0.2.0", default-features = false}                               #zeroknight - add 'asm' to build with Contraints
 ark-bls12-377 = { path = "../curves/bls12_377", version = "0.2.0", default-features = false, features = ["curve"] }
 
-ark-ed-on-bls12-381 = { path = "../curves/ed_on_bls12_381", version = "0.2.0", default-features = false }
+ark-ed-on-bls12-381 = { path = "../curves/ed_on_bls12_381", version = "0.2.0", default-features = false , features = [ "r1cs" ]} #zeroknight - constraints
 
 ark-ec = { path = "../algebra/ec", version = "0.2.0", default-features = false }
 ark-poly = { path = "../algebra/poly", version = "0.2.0", default-features = false }
 ark-relations = { path = "../snark/relations", version = "0.2.0", default-features = false }
 ark-serialize = { path = "../algebra/serialize", version = "0.2.0", default-features = false, features = [ "derive" ] }
 ark-std = { path = "../utils", default-features = false, features = [ "print-trace" ] }
-ark-groth16 = { path = "../groth16", version = "0.2.0", default-features = false, features = [ "std" ] }
+ark-groth16 = { path = "../groth16", version = "0.2.0", default-features = false, features = [ "std" ] }   #zeroknight - std -> r1cs
 ark-marlin = { path = "../marlin", version = "0.2.0", default-features = false, features = [ "std" ] }
 ark-poly-commit = { path = "../poly-commit", version = "0.2.0", default-features = false, features = [ "std" ] }
 lazy_static = "1"

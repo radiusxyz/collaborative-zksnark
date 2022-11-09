@@ -1,4 +1,5 @@
 use super::silly::MySillyCircuit;
+use ark_crypto_primitives::FixedLengthCRH;
 use ark_ec::PairingEngine;
 use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey};
 use ark_std::{test_rng, UniformRand};
@@ -9,7 +10,9 @@ pub mod prover;
 pub mod r1cs_to_qap;
 
 // zeroknight
-use super::poseidon::PoseidonCircuit;
+//use super::poseidon::PoseidonCircuit;
+use super::poseidon::*;
+
 pub fn mpc_test_prove_and_verify_on_poseidon<E: PairingEngine, S: PairingShare<E>>(n_iters: usize) {
     let rng = &mut test_rng();
 
@@ -23,12 +26,23 @@ where
     C: ConstraintSynthesizer<E::Fr>,
     R: Rng,
 */
-    let params = generate_random_parameters::<E,_,_>(PoseidonCircuit{a: None}, rng).unwrap();   // generate a random common reference string for a circuit
+    let mut parameter = CRHFunction::setup(rng).unwrap();
+    parameter = poseidon_parameters_for_test1(parameter);
 
+    //build the circuit
+    let circuit = PoseidonCircuit {
+        param: parameter.clone(),
+        input: None,
+        output: None,
+    };
+
+    //let params = generate_random_parameters::<E,_,_>(PoseidonCircuit{a: None}, rng).unwrap();   // generate a random common reference string for a circuit
+    let params = generate_random_parameters::<E,_,_>(circuit, rng).unwrap();
 /*
 /// Prepare the verifying key `vk` for use in proof verification.
 pub fn prepare_verifying_key<E: PairingEngine>(vk: &VerifyingKey<E>) -> PreparedVerifyingKey<E>
  */
+
     let pvk = prepare_verifying_key::<E>(&params.vk);
 
 /*
@@ -86,7 +100,7 @@ pub struct MpcPairingEngine<E: PairingEngine, PS: PairingShare<E>> {
 }
  */
         let mpc_proof = prover::create_random_proof::<MpcPairingEngine<E,S>,_,_> (
-            PoseidonCircuit { a: Some(a) },
+            circuit,// PoseidonCircuit { a: Some(a) },
             &mpc_params,
             rng,
         ).unwrap();
