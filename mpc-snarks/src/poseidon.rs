@@ -9,7 +9,7 @@ use ark_crypto_primitives::{
     crh::poseidon::constraints::{PoseidonRoundParamsVar, PoseidonCRHGadget},
 };
 
-use ark_ff::{Field, PrimeField};
+use ark_ff::{Field, PrimeField, ToConstraintField};
 
 use ark_relations::{
     r1cs::{SynthesisError,
@@ -25,8 +25,9 @@ use ark_r1cs_std::{alloc::AllocVar, prelude::*};
 //use ark_ff::ToConstraintField;
 //use ark_std::vec;
 
-use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey};
+use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey, create_random_proof};
 use ark_bls12_381::Bls12_381;
+
 
 // Declare new type
 pub type CRHFunction = PoseidonCRH<Fq, PParams>;
@@ -78,7 +79,6 @@ where
             ark_relations::ns!(cs, "gadget_parameters"),
             || { Ok(&self.param) }
         ).unwrap();    // new_input from a trait 'AllocVar' 
-
 
         // build a circuit
         poseidon_circuit_helper(&self.input, &self.output, cs, pos_param_var)?;
@@ -351,10 +351,39 @@ pub fn tryout_poseidon() {
     };
 
     // setup
-    let mut rng2 = &mut ark_std::test_rng();
-    let params = generate_random_parameters::<Bls12_381,_,_>(circuit, rng2).unwrap();
+    let mut rng_setup = &mut ark_std::test_rng();
+/*
+ark_groth16::generator
+pub fn generate_random_parameters<E, C, R>(circuit: C, rng: &mut R) -> R1CSResult<ProvingKey<E>>
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
+    R: Rng,
+ */
+    let params = generate_random_parameters::<Bls12_381,_,_>(circuit.clone(), rng_setup).unwrap();
 
+/* 
+ark_groth16::prover
+pub fn create_random_proof<E, C, R>(circuit: C, pk: &ProvingKey<E>, rng: &mut R) -> R1CSResult<Proof<E>>
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
+    R: Rng,
+*/
+    let mut rng_prove = &mut ark_std::test_rng();
+    let proof = create_random_proof(circuit.clone(), &params, rng_prove).unwrap();
 
+    // verify
+    let pvk = prepare_verifying_key(&params.vk);
+    let output_fq: Vec<Fq> = ToConstraintField::<Fq>::to_field_elements(&out).unwrap();
+/*
+pub fn verify_proof<E: PairingEngine>(
+    pvk: &PreparedVerifyingKey<E>,
+    proof: &Proof<E>,
+    public_inputs: &[E::Fr],
+) -> R1CSResult<bool>
+ */
+    let res = verify_proof(&pvk, &proof, &output_fq).unwrap();
 
     println!("{}", out);
 
