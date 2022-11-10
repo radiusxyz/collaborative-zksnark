@@ -193,8 +193,8 @@ impl Computation {
     fn run_bls(&self, inputs: Vec<MFr>) -> Vec<MFr> {
         let outputs: Vec<MFr> = match self {
             Computation::Groth16 => {
-                //groth::mpc_test_prove_and_verify::<
-                groth::mpc_test_prove_and_verify_on_poseidon::<
+                groth::mpc_test_prove_and_verify::<
+                //groth::mpc_test_prove_and_verify_on_poseidon::<
                     ark_bls12_377::Bls12_377,
                     mpc_algebra::AdditivePairingShare<ark_bls12_377::Bls12_377>,
                 >(1);

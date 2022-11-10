@@ -13,6 +13,8 @@ pub mod r1cs_to_qap;
 //use super::poseidon::PoseidonCircuit;
 use super::poseidon::*;
 
+/* == temporary commented out..
+
 pub fn mpc_test_prove_and_verify_on_poseidon<E: PairingEngine, S: PairingShare<E>>(n_iters: usize) {
     let rng = &mut test_rng();
 
@@ -121,6 +123,7 @@ pub fn verify_proof<E: PairingEngine>(
     }
 }
 
+*/
 
 
 pub fn mpc_test_prove_and_verify<E: PairingEngine, S: PairingShare<E>>(n_iters: usize) {

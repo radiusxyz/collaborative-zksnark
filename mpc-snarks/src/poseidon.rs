@@ -25,9 +25,11 @@ use ark_r1cs_std::{alloc::AllocVar, prelude::*};
 //use ark_ff::ToConstraintField;
 //use ark_std::vec;
 
+use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey};
+use ark_bls12_381::Bls12_381;
 
+// Declare new type
 pub type CRHFunction = PoseidonCRH<Fq, PParams>;
-
 pub type CRHParam = <CRHFunction as FixedLengthCRH>::Parameters;
 pub type CRHInput = [u8; 32];
 pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
@@ -348,6 +350,12 @@ pub fn tryout_poseidon() {
         output: out,    // pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
     };
 
+    // setup
+    let mut rng2 = &mut ark_std::test_rng();
+    let params = generate_random_parameters::<Bls12_381,_,_>(circuit, rng2).unwrap();
+
+
+
     println!("{}", out);
 
 }
@@ -385,6 +393,6 @@ pub fn poseidon_circuit_helper(
 }
 
 #[test]
-fn test_poseidon() {
+fn test_poseidon_circuit() {
     tryout_poseidon();
 }
