@@ -1,5 +1,5 @@
 use ark_crypto_primitives::{
-    crh::poseidon::{PoseidonCRH, Poseidon, PoseidonRoundParams},
+    crh::{poseidon::{PoseidonCRH, Poseidon, PoseidonRoundParams}, bowe_hopwood::CRH},
     crh::poseidon::sbox::PoseidonSbox,
     crh::FixedLengthCRH, FixedLengthCRHGadget,
 };
@@ -14,6 +14,7 @@ use ark_ff::{Field, PrimeField, ToConstraintField};
 use ark_relations::{
     r1cs::{SynthesisError,
     ConstraintSystemRef,
+    ConstraintSystem,
     ConstraintSynthesizer},   // ../snark/relations
 };
 
@@ -102,7 +103,6 @@ impl PoseidonRoundParams<Fq> for PParams {
     const PARTIAL_ROUNDS: usize = POSEIDON_PARTIAL_ROUNDS;
     const SBOX: PoseidonSbox = POSEIDON_SBOX;
 }
-
 
 pub fn poseidon_parameters_for_test1<F: PrimeField>(mut pos: Poseidon<F, PParams>) -> Poseidon<F, PParams> {
     //let alpha = 5;
@@ -424,4 +424,22 @@ pub fn poseidon_circuit_helper(
 #[test]
 fn test_poseidon_circuit() {
     tryout_poseidon();
+}
+
+#[test]
+fn test_poseidon_evaluate() {
+    let mut rng = ark_std::test_rng();
+    let mut parameter = CRHFunction::setup(&mut rng).unwrap();
+    parameter = poseidon_parameters_for_test1(parameter);
+
+    let inp = [32u8; 32];
+    //output
+    let out = <CRHFunction as FixedLengthCRH>::evaluate(&parameter, &inp).unwrap();
+    
+    let cs = ConstraintSystem::new_ref();
+    let param_var = PoseidonRoundParamsVar::new_witness(ark_relations::ns!(cs, "t"), ||Ok(parameter.clone())).unwrap();
+    let out_var = PoseidonCRHGadget::evaluate(&param_var,
+                                              &UInt8::new_witness_vec(ark_relations::ns!(cs, "declare_input"), &inp).unwrap()).unwrap();
+
+    assert_eq!(out, out_var.value().unwrap());
 }
