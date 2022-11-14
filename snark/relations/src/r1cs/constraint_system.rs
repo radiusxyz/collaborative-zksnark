@@ -938,7 +938,9 @@ impl<F: Field> ConstraintSystemRef<F> {
     pub fn is_satisfied(&self) -> crate::r1cs::Result<bool> {
         self.inner()
             .map_or(Err(SynthesisError::AssignmentMissing), |cs| {
-                cs.borrow().is_satisfied()
+                let res = cs.borrow().is_satisfied();
+                println!("{:?}", res.unwrap());
+                res
             })
     }
 

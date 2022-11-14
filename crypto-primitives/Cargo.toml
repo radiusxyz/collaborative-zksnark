@@ -32,6 +32,10 @@ rayon = { version = "1.0", optional = true }
 derivative = { version = "2.0", features = ["use_core"] }
 tracing = { version = "0.1", default-features = false, features = [ "attributes" ], optional = true }
 
+#zeroknight
+ark-serialize = { version = "^0.3.0", default-features = false, features = [ "derive" ] }
+ark-sponge = { version = "^0.3.0", default-features = false }
+
 [features]
 default = ["std"]
 std = [ "ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std" ]
@@ -46,3 +50,6 @@ ark-ed-on-bls12-381 = { path = "../curves/ed_on_bls12_381/", default-features = 
 ark-bls12-377 = { version = "^0.2.0", default-features = false, features = [ "curve", "r1cs" ] }
 ark-mnt4-298 = { version = "^0.2.0", default-features = false, features = [ "curve", "r1cs" ] }
 ark-mnt6-298 = { version = "^0.2.0", default-features = false, features = [ "r1cs" ] }
+
+[patch.crates-io]
+#ark-sponge = { git = "https://github.com/arkworks-rs/sponge" }
