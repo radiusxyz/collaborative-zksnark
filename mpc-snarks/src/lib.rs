@@ -1,3 +1,6 @@
+mod poseidon;
+mod silly;
+
 #[cfg(test)]
 mod tests {
     #[test]

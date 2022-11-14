@@ -1,270 +1,473 @@
-use crate::crh::poseidon::sbox::PoseidonSbox;
-use crate::crh::FixedLengthCRH;
-use crate::{Error, Vec};
-use ark_std::marker::PhantomData;
-use ark_std::rand::Rng;
+use ark_crypto_primitives::{
+    crh::{poseidon::{PoseidonCRH, Poseidon, PoseidonRoundParams}, bowe_hopwood::CRH},
+    crh::poseidon::sbox::PoseidonSbox,
+    crh::FixedLengthCRH, FixedLengthCRHGadget,
+};
 
-use ark_ff::fields::PrimeField;
-use ark_ff::ToConstraintField;
+// constraints
+use ark_crypto_primitives::{
+    crh::poseidon::constraints::{PoseidonRoundParamsVar, PoseidonCRHGadget},
+};
 
-pub mod sbox;
+use ark_ff::{Field, PrimeField, ToConstraintField, UniformRand};
 
-#[cfg(feature = "r1cs")]
-pub mod constraints;
+use ark_relations::{
+    r1cs::{SynthesisError,
+    ConstraintSystemRef,
+    ConstraintSystem,
+    ConstraintSynthesizer},   // ../snark/relations
+};
 
-// Choice is arbitrary
-pub const PADDING_CONST: u64 = 101;
-pub const ZERO_CONST: u64 = 0;
+// [Important!!] ark-bls12-377 and bls12-381 doesn't work!!!! by zeroknight
+use ark_ed_on_bls12_381::Fq;
 
-pub trait PoseidonRoundParams<F: PrimeField>: Default + Clone {
-    /// The size of the permutation, in field elements.
-    const WIDTH: usize;
-    /// Number of full SBox rounds in beginning
-    const FULL_ROUNDS_BEGINNING: usize;
-    /// Number of full SBox rounds in end
-    const FULL_ROUNDS_END: usize;
-    /// Number of partial rounds
-    const PARTIAL_ROUNDS: usize;
-    /// The S-box to apply in the sub words layer.
-    const SBOX: PoseidonSbox;
-}
+// 
+use ark_r1cs_std::{alloc::AllocVar, prelude::*};
+//use ark_ff::ToConstraintField;
+//use ark_std::vec;
 
-/// The Poseidon permutation.
-#[derive(Default, Clone)]
-pub struct Poseidon<F, P> {
-    pub params: P,
-    /// The round key constants
-    pub round_keys: Vec<F>,
-    /// The MDS matrix to apply in the mix layer.
-    pub mds_matrix: Vec<Vec<F>>,
-}
+use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey, create_random_proof};
+use ark_bls12_381::Bls12_381;
 
-impl<F: PrimeField, P: PoseidonRoundParams<F>> Poseidon<F, P> {
-    fn permute(&self, input: &[F]) -> Vec<F> {
-        let width = P::WIDTH;
-        assert_eq!(input.len(), width);
 
-        let full_rounds_beginning = P::FULL_ROUNDS_BEGINNING;
-        let partial_rounds = P::PARTIAL_ROUNDS;
-        let full_rounds_end = P::FULL_ROUNDS_END;
+// Rand instead of ark_std::rand..
+use rand_chacha::ChaCha20Rng;
+use ark_std::{rand::SeedableRng};   // from_seed
 
-        let mut current_state = input.to_vec();
-        let mut current_state_temp = vec![F::zero().clone(); width];
-
-        let mut round_keys_offset = 0;
-
-        // full Sbox rounds
-        for _ in 0..full_rounds_beginning {
-            // Sbox layer
-            for i in 0..width {
-                current_state[i] += self.round_keys[round_keys_offset];
-                current_state[i] = P::SBOX.apply_sbox(current_state[i]);
-                round_keys_offset += 1;
-            }
-
-            // linear layer
-            for j in 0..width {
-                for i in 0..width {
-                    current_state_temp[i] += current_state[j] * self.mds_matrix[i][j];
-                }
-            }
-
-            // Output of this round becomes input to next round
-            for i in 0..width {
-                current_state[i] = current_state_temp[i];
-                current_state_temp[i] = F::zero();
-            }
-        }
-
-        // middle partial Sbox rounds
-        for _ in full_rounds_beginning..(full_rounds_beginning + partial_rounds) {
-            for i in 0..width {
-                current_state[i] += &self.round_keys[round_keys_offset];
-                round_keys_offset += 1;
-            }
-
-            // partial Sbox layer, apply Sbox to only 1 element of the state.
-            // Here the last one is chosen but the choice is arbitrary.
-            current_state[width - 1] = P::SBOX.apply_sbox(current_state[width - 1]);
-
-            // linear layer
-            for j in 0..width {
-                for i in 0..width {
-                    current_state_temp[i] += current_state[j] * self.mds_matrix[i][j];
-                }
-            }
-
-            // Output of this round becomes input to next round
-            for i in 0..width {
-                current_state[i] = current_state_temp[i];
-                current_state_temp[i] = F::zero();
-            }
-        }
-
-        // last full Sbox rounds
-        for _ in full_rounds_beginning + partial_rounds
-            ..(full_rounds_beginning + partial_rounds + full_rounds_end)
-        {
-            // Sbox layer
-            for i in 0..width {
-                current_state[i] += self.round_keys[round_keys_offset];
-                current_state[i] = P::SBOX.apply_sbox(current_state[i]);
-                round_keys_offset += 1;
-            }
-
-            // linear layer
-            for j in 0..width {
-                for i in 0..width {
-                    current_state_temp[i] += current_state[j] * self.mds_matrix[i][j];
-                }
-            }
-
-            // Output of this round becomes input to next round
-            for i in 0..width {
-                current_state[i] = current_state_temp[i];
-                current_state_temp[i] = F::zero();
-            }
-        }
-
-        // Finally the current_state becomes the output
-        current_state
-    }
-
-    pub fn hash_2(&self, xl: F, xr: F) -> F {
-        // Only 2 inputs to the permutation are set to the input of this hash
-        // function, one is set to the padding constant and rest are 0. Always keep
-        // the 1st input as 0
-        let input = vec![
-            F::from(ZERO_CONST),
-            xl,
-            xr,
-            F::from(PADDING_CONST),
-            F::from(ZERO_CONST),
-            F::from(ZERO_CONST),
-        ];
-
-        // Never take the first output
-        self.permute(&input)[1]
-    }
-
-    pub fn hash_4(&self, inputs: [F; 4]) -> F {
-        // Only 4 inputs to the permutation are set to the input of this hash
-        // function, one is set to the padding constant and one is set to 0. Always
-        // keep the 1st input as 0
-        let input = vec![
-            F::from(ZERO_CONST),
-            inputs[0],
-            inputs[1],
-            inputs[2],
-            inputs[3],
-            F::from(PADDING_CONST),
-        ];
-
-        // Never take the first output
-        self.permute(&input)[1]
-    }
-}
-
-pub struct PoseidonCRH<F: PrimeField, P: PoseidonRoundParams<F>> {
-    field: PhantomData<F>,
-    params: PhantomData<P>,
-}
-
-impl<F: PrimeField, P: PoseidonRoundParams<F>> PoseidonCRH<F, P> {
-    pub fn create_mds<R: Rng>(_rng: &mut R) -> Vec<Vec<F>> {
-        let mds_matrix = Vec::new();
-        mds_matrix
-    }
-
-    pub fn create_round_consts<R: Rng>(_rng: &mut R) -> Vec<F> {
-        let round_consts = Vec::new();
-        round_consts
-    }
-}
-
-impl<F: PrimeField, P: PoseidonRoundParams<F>> FixedLengthCRH for PoseidonCRH<F, P> {
-    const INPUT_SIZE_BITS: usize = 32;
-    type Output = F;
-    type Parameters = Poseidon<F, P>;
-
-    fn setup<R: Rng>(rng: &mut R) -> Result<Self::Parameters, Error> {
-        // let time = start_timer!(|| format!(
-        //     "Poseidon::Setup: {} {}-bit windows; {{0,1}}^{{{}}} -> C",
-        //     W::NUM_WINDOWS,
-        //     W::WINDOW_SIZE,
-        //     W::NUM_WINDOWS * W::WINDOW_SIZE
-        // ));
-
-        let mds = Self::create_mds(rng);
-        let rc = Self::create_round_consts(rng);
-        Ok(Self::Parameters {
-            params: P::default(),
-            round_keys: rc,
-            mds_matrix: mds,
-        })
-    }
-
-    // https://github.com/arkworks-rs/algebra/blob/master/ff/src/to_field_vec.rs
-    fn evaluate(parameters: &Self::Parameters, input: &[u8]) -> Result<Self::Output, Error> {
-        let eval_time = start_timer!(|| "PoseidonCRH::Eval");
-        let elts: Vec<F> = input.to_field_elements().unwrap_or(Vec::new());
-        let result = match elts.len() {
-            2 => parameters.hash_2(elts[0], elts[1]),
-            4 => parameters.hash_4([elts[0], elts[1], elts[2], elts[3]]),
-            _ => panic!("incorrect number of windows (elements) for poseidon hash"),
-        };
-
-        end_timer!(eval_time);
-
-        Ok(result)
-    }
-}
+// Declare new type
+pub type CRHFunction = PoseidonCRH<Fq, PParams>;
+pub type CRHParam = <CRHFunction as FixedLengthCRH>::Parameters;
+pub type CRHInput = [u8; 32];
+pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
 
 /*
-// from v0.3.0 by zeroknight
-use crate::crh::CRHScheme;
-use ark_sponge::{Absorb, CryptographicSponge};
-use ark_sponge::poseidon::{PoseidonConfig, PoseidonSponge};
-pub struct CRH<F: PrimeField + Absorb> {
-    field_phantom: PhantomData<F>, 
-}
-
-impl<F: PrimeField + Absorb> CRHScheme for CRH<F> {
-    type Input = [F];
-
-    type Output = F;
-
-    type Parameters = PoseidonConfig<F>;
-
-    fn setup<R: Rng>(r: &mut R) -> Result<Self::Parameters, Error> {
-        unimplemented!()
-    }
-
-    fn evaluate<T: core::borrow::Borrow<Self::Input>>(
-        parameters: &Self::Parameters,
-        input: T,
-    ) -> Result<Self::Output, Error> {
-        let input = input.borrow();
-        let mut sponge = PoseidonSponge::new(parameters);
-        sponge.absorb(&input);
-        let res = sponge.squeeze_field_elements::<F>(1);
-        Ok(res[0])
-    }
+#[derive(Clone)]
+pub struct PoseidonCircuit<F: Field> { // Field vs Primefield with PoseidonRoundParamsVar
+    pub a: Option<F>,
+    pub param: CRHParam,
+    pub input: CRHInput,
+    pub output: CRHOutput,
 }
 */
+#[derive(Clone)]
+pub struct PoseidonCircuit {
+    pub param: CRHParam,
+    pub input: CRHInput,
+    pub output: CRHOutput,
+}
+
+
+impl ConstraintSynthesizer<Fq> for PoseidonCircuit {
+    fn generate_constraints (
+        self,
+        cs: ConstraintSystemRef<Fq>,
+    ) -> Result<(), SynthesisError> {
 
 /*
-use ark_sponge::poseidon::PoseidonParameters;
+
+/// Specifies how variables of type `Self` should be allocated in a
+/// `ConstraintSystem`.
+pub trait AllocVar<V, F: Field>
+where
+    Self: Sized,
+    V: ?Sized,
+{
+    - new_variable, new_constant, new_input, new_witness
+
+    fn new_input<T: Borrow<V>>(
+        cs: impl Into<Namespace<F>>,
+        f: impl FnOnce() -> Result<T, SynthesisError>,
+    ) -> Result<Self, SynthesisError> {
+*/
+        // parameters for Poseidon
+        let pos_param_var = PoseidonRoundParamsVar::new_input(
+            ark_relations::ns!(cs, "gadget_parameters"),
+            || { Ok(&self.param) }
+        ).unwrap();    // new_input from a trait 'AllocVar' 
+
+        // build a circuit
+        poseidon_circuit_helper(&self.input, &self.output, cs, pos_param_var)?;
+
+        Ok(())
+    }
+}
+
+pub const POSEIDON_WIDTH: usize = 6;
+pub const POSEIDON_FULL_ROUNDS_BEGINNING: usize = 8;
+pub const POSEIDON_FULL_ROUNDS_END: usize = 0;
+pub const POSEIDON_PARTIAL_ROUNDS: usize = 36;
+pub const POSEIDON_SBOX: PoseidonSbox = PoseidonSbox::Exponentiation(5);
+
+#[derive(Default, Clone, Debug)]
+pub struct PParams;
+impl PoseidonRoundParams<Fq> for PParams {
+    const WIDTH: usize = POSEIDON_WIDTH;
+    const FULL_ROUNDS_BEGINNING: usize = POSEIDON_FULL_ROUNDS_BEGINNING;
+    const FULL_ROUNDS_END: usize = POSEIDON_FULL_ROUNDS_END;
+    const PARTIAL_ROUNDS: usize = POSEIDON_PARTIAL_ROUNDS;
+    const SBOX: PoseidonSbox = POSEIDON_SBOX;
+}
+
+pub fn poseidon_parameters_for_test1<F: PrimeField>(mut pos: Poseidon<F, PParams>) -> Poseidon<F, PParams> {
+    //let alpha = 5;
+    let mds = vec![
+        vec![
+            F::from_str(
+                "43228725308391137369947362226390319299014033584574058394339561338097152657858",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "20729134655727743386784826341366384914431326428651109729494295849276339718592",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "14275792724825301816674509766636153429127896752891673527373812580216824074377",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "43228725308391137369947362226390319299014033584574058394339561338097152657858",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "20729134655727743386784826341366384914431326428651109729494295849276339718592",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "14275792724825301816674509766636153429127896752891673527373812580216824074377",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+        ],
+        vec![
+            F::from_str(
+                "3039440043015681380498693766234886011876841428799441709991632635031851609481",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "6678863357926068615342013496680930722082156498064457711885464611323928471101",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "37355038393562575053091209735467454314247378274125943833499651442997254948957",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "3039440043015681380498693766234886011876841428799441709991632635031851609481",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "6678863357926068615342013496680930722082156498064457711885464611323928471101",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "37355038393562575053091209735467454314247378274125943833499651442997254948957",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+        ],
+        vec![
+            F::from_str(
+                "26481612700543967643159862864328231943993263806649000633819754663276818191580",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "30103264397473155564098369644643015994024192377175707604277831692111219371047",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "5712721806190262694719203887224391960978962995663881615739647362444059585747",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "26481612700543967643159862864328231943993263806649000633819754663276818191580",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "30103264397473155564098369644643015994024192377175707604277831692111219371047",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "5712721806190262694719203887224391960978962995663881615739647362444059585747",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+
+        ],
+         vec![
+            F::from_str(
+                "43228725308391137369947362226390319299014033584574058394339561338097152657858",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "20729134655727743386784826341366384914431326428651109729494295849276339718592",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "14275792724825301816674509766636153429127896752891673527373812580216824074377",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "43228725308391137369947362226390319299014033584574058394339561338097152657858",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "20729134655727743386784826341366384914431326428651109729494295849276339718592",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "14275792724825301816674509766636153429127896752891673527373812580216824074377",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+        ],
+        vec![
+            F::from_str(
+                "3039440043015681380498693766234886011876841428799441709991632635031851609481",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "6678863357926068615342013496680930722082156498064457711885464611323928471101",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "37355038393562575053091209735467454314247378274125943833499651442997254948957",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "3039440043015681380498693766234886011876841428799441709991632635031851609481",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "6678863357926068615342013496680930722082156498064457711885464611323928471101",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "37355038393562575053091209735467454314247378274125943833499651442997254948957",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+        ],
+        vec![
+            F::from_str(
+                "26481612700543967643159862864328231943993263806649000633819754663276818191580",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "30103264397473155564098369644643015994024192377175707604277831692111219371047",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "5712721806190262694719203887224391960978962995663881615739647362444059585747",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "26481612700543967643159862864328231943993263806649000633819754663276818191580",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "30103264397473155564098369644643015994024192377175707604277831692111219371047",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+            F::from_str(
+                "5712721806190262694719203887224391960978962995663881615739647362444059585747",
+            )
+            .map_err(|_| ())
+            .unwrap(),
+
+        ],
+    ];
+	
+    //let mut rng = ark_std::test_rng();
+    let mut seed =[0u8; 32];
+    let mut rng = ChaCha20Rng::from_seed(seed);
+    
+    let  rng1 = F::rand(&mut rng);
+    let mut vals: Vec<F> = vec![rng1];
+    let mut  k = 0;
+    for i in 0..269 {
+        k = k + 1;
+        
+        //let mut rng = ark_std::test_rng();
+        seed[i%8] = seed[i%8]+1;
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        
+        let  rng1 = F::rand(&mut rng);
+        vals.push(rng1);
+        if k>(32*7-1){
+            k = 0;
+        }
+    }
+    //println("vals = {:?}",vals);
+    pos.mds_matrix=mds;
+    pos.round_keys=vals;
+    pos.params = PParams;
+    pos
+
+}
+
+
+
+
+pub fn tryout_poseidon() {
+
+    let mut rng = &mut ark_std::test_rng();
+    // PoseidonCRH::<Fq, PParams> doesn't work..
+    let mut parameter = CRHFunction::setup(rng).unwrap();
+    parameter = poseidon_parameters_for_test1(parameter);
+
+    let inp = [32u8; 32];
+    let out = <CRHFunction as FixedLengthCRH>::evaluate(&parameter, &inp).unwrap();
+
+    // build the circuit
+    let circuit = PoseidonCircuit {
+        // pub type CRHFunction = PoseidonCRH<Fq, PParams>;
+        param: parameter.clone(),   // pub type CRHParam = <CRHFunction as FixedLengthCRH>::Parameters;
+        input: inp, // pub type CRHInput = [u8; 32];
+        output: out,    // pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
+    };
+
+    // setup
+    let mut rng_setup = &mut ark_std::test_rng();
+/*
+ark_groth16::generator
+pub fn generate_random_parameters<E, C, R>(circuit: C, rng: &mut R) -> R1CSResult<ProvingKey<E>>
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
+    R: Rng,
+ */
+    let params = generate_random_parameters::<Bls12_381,_,_>(circuit.clone(), rng_setup).unwrap();
+
+/* 
+ark_groth16::prover
+pub fn create_random_proof<E, C, R>(circuit: C, pk: &ProvingKey<E>, rng: &mut R) -> R1CSResult<Proof<E>>
+where
+    E: PairingEngine,
+    C: ConstraintSynthesizer<E::Fr>,
+    R: Rng,
+*/
+    let mut rng_prove = &mut ark_std::test_rng();
+    let proof = create_random_proof(circuit.clone(), &params, rng_prove).unwrap();
+
+    // verify
+    let pvk = prepare_verifying_key(&params.vk);
+    let output_fq: Vec<Fq> = ToConstraintField::<Fq>::to_field_elements(&out).unwrap();
+/*
+pub fn verify_proof<E: PairingEngine>(
+    pvk: &PreparedVerifyingKey<E>,
+    proof: &Proof<E>,
+    public_inputs: &[E::Fr],
+) -> R1CSResult<bool>
+ */
+    let res = verify_proof(&pvk, &proof, &output_fq).unwrap();
+
+    println!("{}", out);
+
+}
+
+pub fn poseidon_circuit_helper(
+    input: &[u8; 32],
+    output: &CRHOutput, //<CRHFunction as FixedLengthCRH>::Output;
+    cs: ConstraintSystemRef<Fq>, // A shared reference to a constraint system that can be stored in high level variables.
+                                    // Fq : ark_bls12_381::fields::fr  |   pub type Fr = Fp256<FrParameters>
+    // struct PoseidonRoundParamsVar<F: PrimeField, P: PoseidonRoundParams<F>>
+    pos_param_var: PoseidonRoundParamsVar<Fq, PParams>,
+) -> Result<(), SynthesisError> {
+
+    // Allocate parameter for Poseidon
+    let parameters_var = pos_param_var;
+
+    // Allocation inputs    .. what about witness or public input?!
+    //ark_r1cs_std::bits::uint8::UInt8
+        // pub fn new_witness_vec(cs: impl Into<Namespace<F>>, values: &[impl Into<Option<u8>> + Copy]) -> Result<Vec<Self>, SynthesisError>
+    let intput_var = UInt8::new_witness_vec(ark_relations::ns!(cs, "declare_input"), input)?;
+
+    // Allocate output which will be evaluated in the circuit
+    let output_var = PoseidonCRHGadget::evaluate(&parameters_var, &intput_var)?;
+
+    // Allocate actual output from outside of the circuit
+    let actual_out_var = <PoseidonCRHGadget<Fq, PParams> as FixedLengthCRHGadget<_, Fq>>::OutputVar::new_input(
+        ark_relations::ns!(cs, "declare_output"),
+        || Ok(output),
+    )?;
+
+    // Constraint to compare the outputs
+    output_var.enforce_equal(&actual_out_var)?;
+
+    Ok(())
+}
 
 #[test]
-fn test_consistency() {
+fn test_poseidon_circuit() {
+    tryout_poseidon();
+}
+
+#[test]
+fn test_poseidon_evaluate() {
+    let mut rng = ark_std::test_rng();
+    let mut parameter = CRHFunction::setup(&mut rng).unwrap();
+    parameter = poseidon_parameters_for_test1(parameter);
+
+    let inp = [32u8; 32];
+    //output
+    let out = <CRHFunction as FixedLengthCRH>::evaluate(&parameter, &inp).unwrap();
+    
+    let cs = ConstraintSystem::new_ref();
+    let param_var = PoseidonRoundParamsVar::new_witness(ark_relations::ns!(cs, "t"), ||Ok(parameter.clone())).unwrap();
+    let out_var = PoseidonCRHGadget::evaluate(&param_var,
+                                              &UInt8::new_witness_vec(ark_relations::ns!(cs, "declare_input"), &inp).unwrap()).unwrap();
+
+    assert_eq!(out, out_var.value().unwrap());
+}
+
+// added by zeroknight : test Poseidon..
+
+use ark_sponge::poseidon::PoseidonParameters;
+pub const SIZEOFINPUT: usize = 64;
+pub const SIZEOFOUTPUT: usize = 2;
+#[test]
+fn test_sponge() {
+    let mut rng = ark_std::test_rng();
+    //let cs = ConstraintSystem::new_ref();
+
+    let absorb1: Vec<_> = (0..SIZEOFINPUT).map(|_| ark_bls12_381::Fr::rand(&mut rng)).collect();
+
+
+    //println!("{:?}", absorb1);
 
 }
-*/
 
-/*
-/// Generate default parameters (bls381-fr-only) for alpha = 17, state-size = 8
-pub(crate) fn poseidon_parameters_for_test<F: PrimeField>() -> PoseidonParameters<F> {
+pub fn poseidon_parameters_for_test_s<F: PrimeField>() -> PoseidonParameters<F> {
     let alpha = 17;
     let mds = vec![
         vec![
@@ -953,12 +1156,12 @@ pub(crate) fn poseidon_parameters_for_test<F: PrimeField>() -> PoseidonParameter
     let full_rounds = 8;
     let total_rounds = 37;
     let partial_rounds = total_rounds - full_rounds;
-    PoseidonParameters {
+    PoseidonParameters::new(
         full_rounds,
         partial_rounds,
         alpha,
-        ark,
         mds,
-    }
+        ark,
+    )
+    
 }
-*/

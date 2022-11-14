@@ -1,10 +1,12 @@
 #[macro_use]
 extern crate criterion;
 
-use algebra::ed_on_bls12_377::EdwardsProjective as Edwards;
+//use algebra::ed_on_bls12_377::EdwardsProjective as Edwards;   // @zeroknight removed algebra
+use ark_ed_on_bls12_377::EdwardsProjective as Edwards;
+
 use blake2::Blake2s;
 use criterion::Criterion;
-use crypto_primitives::signature::{schnorr::*, SignatureScheme};
+use ark_crypto_primitives::signature::{schnorr::*, SignatureScheme};    // @zeroknight added ark_
 use ark_std::rand::Rng;
 
 type SchnorrEdwards = Schnorr<Edwards, Blake2s>;

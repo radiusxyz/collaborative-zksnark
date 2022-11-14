@@ -1,9 +1,12 @@
 #[macro_use]
 extern crate criterion;
 
-use algebra::{ed_on_bls12_377::EdwardsProjective as Edwards, UniformRand};
+// use algebra::{ed_on_bls12_377::EdwardsProjective as Edwards, UniformRand};   // @zeroknight
+use ark_ed_on_bls12_377::EdwardsProjective as Edwards;
+use ark_ff::UniformRand;
+
 use criterion::Criterion;
-use crypto_primitives::commitment::{pedersen::*, CommitmentScheme};
+use ark_crypto_primitives::commitment::{pedersen::*, CommitmentScheme}; // @zeroknight added ark_
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CommWindow;

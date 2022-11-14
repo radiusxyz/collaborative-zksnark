@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
+use ark_crypto_primitives::*;   //zeroknight
+
 use ark_ec::PairingEngine;
 use ark_ff::{Field, UniformRand};
 use ark_groth16;
@@ -21,6 +23,9 @@ use std::path::PathBuf;
 mod groth;
 mod marlin;
 mod silly;
+
+// zeroknight
+mod poseidon;
 
 const TIMED_SECTION_LABEL: &str = "timed section";
 

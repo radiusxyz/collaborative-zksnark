@@ -1,9 +1,11 @@
 #[macro_use]
 extern crate criterion;
 
-use algebra::ed_on_bls12_377::EdwardsProjective as Edwards;
+//use algebra::ed_on_bls12_377::EdwardsProjective as Edwards;
+use ark_ed_on_bls12_377::EdwardsProjective as Edwards;
+
 use criterion::Criterion;
-use crypto_primitives::crh::{pedersen::*, FixedLengthCRH};
+use ark_crypto_primitives::crh::{pedersen::*, FixedLengthCRH}; // @zeroknight added ark_ 
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct HashWindow;
