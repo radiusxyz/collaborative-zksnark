@@ -1,7 +1,8 @@
 use super::silly::MySillyCircuit;
 use ark_crypto_primitives::FixedLengthCRH;
 use ark_ec::PairingEngine;
-use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey};
+use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey, create_random_proof};
+use ark_sponge::poseidon::PoseidonSponge;
 use ark_std::{test_rng, UniformRand};
 use mpc_algebra::*;
 use mpc_algebra::Reveal;
@@ -125,6 +126,48 @@ pub fn verify_proof<E: PairingEngine>(
 
 */
 
+use ark_bls12_381::Fr;
+use ark_sponge::{CryptographicSponge, FieldBasedCryptographicSponge};        // new from PoseidonSponge
+use ark_sponge::constraints::CryptographicSpongeVar;
+pub fn mpc_test_prove_and_verify_on_poseidon<E: PairingEngine, S: PairingShare<E>>( n_iters: usize) {
+
+//    let input = [1u8; SIZEOFINPUT].to_vec();
+    const INPTEXT:&str = "Input...";
+    const LEN: usize = INPTEXT.len();
+    let input = [
+        INPTEXT.as_ref(),
+        [0u8; SIZEOFINPUT - LEN].as_ref(),
+    ]
+    .concat();
+    let inp = input;
+
+    let parameter = poseidon_parameters_for_test_s::<Fr>();
+
+    let mut native_sponge = PoseidonSponge::< >::new(&parameter);
+    native_sponge.absorb(&inp);
+    let out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+    println!("out = {:?}", out);
+
+    // build the circuit
+    let circuit = SPNGCircuit {
+        param: parameter.clone(),
+        input: inp,
+        output: out.clone(),
+    };
+    let rng = &mut test_rng();
+    let zk_param = generate_random_parameters::<ark_bls12_381::Bls12_381,_,_>(circuit.clone(), rng).unwrap();
+
+    // proving
+    let rng2 = &mut test_rng();
+    let proof = create_random_proof(circuit.clone(), &zk_param, rng2).unwrap();
+
+    // verifying
+    let pvk = prepare_verifying_key(&zk_param.vk);
+    let res = verify_proof(&pvk, &proof, &out).unwrap();
+
+    assert!(res);
+
+}
 
 pub fn mpc_test_prove_and_verify<E: PairingEngine, S: PairingShare<E>>(n_iters: usize) {
     let rng = &mut test_rng();

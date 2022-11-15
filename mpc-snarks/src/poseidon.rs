@@ -22,7 +22,7 @@ use ark_relations::{
 use ark_ed_on_bls12_381::Fq;
 
 // 
-use ark_r1cs_std::{alloc::AllocVar, prelude::*};
+use ark_r1cs_std::{alloc::AllocVar, prelude::*, fields::fp::FpVar};
 //use ark_ff::ToConstraintField;
 //use ark_std::vec;
 
@@ -452,19 +452,43 @@ fn test_poseidon_evaluate() {
 
 // added by zeroknight : test Poseidon..
 
-use ark_sponge::poseidon::PoseidonParameters;
+use ark_sponge::poseidon::{PoseidonParameters, PoseidonSponge};
+use ark_sponge::poseidon::constraints::PoseidonSpongeVar;
+use ark_sponge::CryptographicSponge;        // new from PoseidonSponge
+use ark_sponge::constraints::CryptographicSpongeVar;
+use ark_bls12_381::Fr;
+
 pub const SIZEOFINPUT: usize = 64;
 pub const SIZEOFOUTPUT: usize = 2;
 #[test]
 fn test_sponge() {
     let mut rng = ark_std::test_rng();
-    //let cs = ConstraintSystem::new_ref();
+    let cs = ConstraintSystem::new_ref();
 
-    let absorb1: Vec<_> = (0..SIZEOFINPUT).map(|_| ark_bls12_381::Fr::rand(&mut rng)).collect();
+    let absorb1: Vec<_> = (0..SIZEOFINPUT).map(|_| Fr::rand(&mut rng)).collect();
 
+    let sponge_params = poseidon_parameters_for_test_s::<Fr>();
 
-    //println!("{:?}", absorb1);
+    // native
+    let mut native_sponge = PoseidonSponge::<Fr>::new(&sponge_params);  //CryptoSage
+    native_sponge.absorb(&absorb1);
+    let squeeze1 = native_sponge.squeeze_field_elements::<Fr>(SIZEOFOUTPUT);
 
+    // constraints
+    let absorb1_var: Vec<_> = absorb1
+                                .iter()
+                                .map(|v| FpVar::new_input(ark_relations::ns!(cs, "absorb1"), 
+                                ||Ok(*v)).unwrap())
+                                .collect();
+    let mut constraint_sponge = PoseidonSpongeVar::<Fr>::new(cs.clone(), &sponge_params);
+    constraint_sponge.absorb(&absorb1_var);
+    let squeeze2 = constraint_sponge.squeeze_field_elements(SIZEOFOUTPUT).unwrap();
+    let res = squeeze2.value().unwrap();
+    
+    //println!("{:?}", squeeze1);
+    //println!("{:?}", res);
+    assert_eq!(res, squeeze1);
+    assert!(cs.is_satisfied().unwrap());
 }
 
 pub fn poseidon_parameters_for_test_s<F: PrimeField>() -> PoseidonParameters<F> {
@@ -1165,3 +1189,58 @@ pub fn poseidon_parameters_for_test_s<F: PrimeField>() -> PoseidonParameters<F> 
     )
     
 }
+
+
+//== poseidon with sponge by zeroknight
+pub type PoseidonParam = PoseidonParameters<Fr>;
+pub type SPNGFunction = PoseidonSponge<Fr>;
+pub type SPNGInput = Vec<u8>;
+pub type SPNGOutput = Vec<Fr>;
+pub type SPNGParam = <SPNGFunction as CryptographicSponge>::Parameters;
+
+#[derive(Clone)]
+pub struct SPNGCircuit {
+    pub param: SPNGParam,
+    pub input: SPNGInput,
+    pub output: SPNGOutput,
+}
+
+impl ConstraintSynthesizer<Fr> for SPNGCircuit {
+    fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
+        let pos_param_var = PoseidonSpongeVar::<Fr>::new(cs.clone(), &self.param);
+
+        spng_circuit_helper(self.input, &self.output, cs, pos_param_var)?;
+
+        Ok(())
+    }
+}
+
+fn spng_circuit_helper(
+    input: SPNGInput,
+    output: &SPNGOutput,
+    cs: ConstraintSystemRef<Fr>,
+    pos_param_var: PoseidonSpongeVar<Fr>, ) -> Result<(), SynthesisError> 
+{
+    let absorb1 = input.clone();
+    let absorb1_var: Vec<_> = absorb1.iter()
+                .map(|v| UInt8::new_witness(ark_relations::ns!(cs, "absorb1"),
+                                                    || Ok(*v)).unwrap()).collect();
+    
+    let sponge_params = poseidon_parameters_for_test_s::<Fr>();
+
+    //sponge
+    let mut native_sponge = PoseidonSponge::<Fr>::new(&sponge_params);
+    let mut constraint_sponge = pos_param_var;
+
+    native_sponge.absorb(&absorb1);
+    constraint_sponge.absorb(&absorb1_var).unwrap();
+
+    let squeeze2 = constraint_sponge.squeeze_field_elements(SIZEOFOUTPUT).unwrap();
+    let outputVar: Vec<_> = output.iter()
+                            .map(|v| FpVar::new_input(ark_relations::ns!(cs, "absorb1"), 
+                                                || Ok(*v)).unwrap()).collect();
+    squeeze2.enforce_equal(&outputVar).unwrap();
+    Ok(())
+}
+
+

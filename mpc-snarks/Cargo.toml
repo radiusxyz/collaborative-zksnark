@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 #zeroknight
-ark-sponge={ version = "^0.3.0", default-features = false}
+ark-sponge={ path="../sponge", version = "^0.3.0", default-features = false, features=["r1cs"]}
 
 #zeroknight
 ark-crypto-primitives = { path = "../crypto-primitives", version = "^0.2.0", default-features = false, features = ["r1cs"]}
