@@ -33,8 +33,8 @@ derivative = { version = "2.0", features = ["use_core"] }
 tracing = { version = "0.1", default-features = false, features = [ "attributes" ], optional = true }
 
 #zeroknight
-ark-serialize = { version = "^0.3.0", default-features = false, features = [ "derive" ] }
-ark-sponge = { version = "^0.3.0", default-features = false }
+#ark-serialize = { version = "^0.3.0", default-features = false, features = [ "derive" ] }
+#ark-sponge = { version = "^0.3.0", default-features = false }
 
 [features]
 default = ["std"]
