@@ -1,4 +1,6 @@
 mod poseidon;
+mod mimc;
+
 mod silly;
 
 #[cfg(test)]
