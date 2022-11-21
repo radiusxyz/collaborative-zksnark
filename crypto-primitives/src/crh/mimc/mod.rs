@@ -2,23 +2,24 @@ use core::marker::PhantomData;
 
 // Bring in some tools for using pairing-friendly curves
 // We're going to use the BLS12-377 pairing-friendly elliptic curve.
-use ark_ff::Field;
-use ark_std::{rand::Rng, test_rng};
-
+use ark_ff::{PrimeField};
+use ark_std::{rand::Rng};
 
 use crate::crh::FixedLengthCRH;
 use crate::Error;
 use crate::Vec;
 
-pub struct CRH<'a, F: Field> {
-    constants: &'a [F],
+pub struct MimcCRH<F: PrimeField> {
+//    pub constants: &'a [F],
     window: PhantomData<F>,
 }
 
 #[derive(Clone, Default)]
-pub struct Parameters;
+pub struct MimcParameters<F: PrimeField> {
+    pub constants : Vec<F>,
+}
 
-const MIMC_ROUNDS: usize = 322;
+pub const MIMC_ROUNDS: usize = 322;
 
 #[cfg(feature = "r1cs")]
 pub mod constraints;
@@ -36,7 +37,7 @@ pub mod constraints;
 ///     return xL
 /// }
 /// ```
-pub fn mimc<F: Field>(mut xl: F, mut xr: F, constants: &[F]) -> F {
+pub fn mimc<F: PrimeField>(mut xl: F, mut xr: F, constants: &[F]) -> F {
     assert_eq!(constants.len(), MIMC_ROUNDS);
 
     for i in 0..MIMC_ROUNDS {
@@ -53,28 +54,32 @@ pub fn mimc<F: Field>(mut xl: F, mut xr: F, constants: &[F]) -> F {
     xl
 }
 
-impl<'a, F:Field> FixedLengthCRH for CRH<'a, F> {
+impl<F:PrimeField> FixedLengthCRH for MimcCRH<F> {
     const INPUT_SIZE_BITS: usize = 2usize;
     type Output = F;
-    type Parameters = Parameters;
+    type Parameters = MimcParameters<F>;
 
 
-    fn setup<R: Rng>(rng: &mut R) -> Result<Self::Parameters, Error> {
-        let rng = &mut ark_std::test_rng();
+    fn setup<R: Rng>(_rng: &mut R) -> Result<Self::Parameters, Error> {
+        //let rng = &mut test_rng();
+        let constants = (0..MIMC_ROUNDS).map(|v| F::from_random_bytes(&[v as u8]).unwrap()).collect::<crate::Vec<F>>();
         
-        //let constants = (0..MIMC_ROUNDS).map(|_| rng.gen()).collect::<crate::Vec<F>>();
-        
-        Ok(Self::Parameters{})
+        Ok(Self::Parameters{
+            constants
+        })
     }
 
-    fn evaluate(parameters: &Self::Parameters, input: &[u8]) -> Result<Self::Output, Error> {
-        let rng = &mut test_rng();
+    fn evaluate(_parameters: &Self::Parameters, input: &[u8]) -> Result<Self::Output, Error> {
+        //let rng = &mut test_rng();
         
         // Generate the MiMC round constants
         let constants : Vec<F> = (0..MIMC_ROUNDS).map(|v| F::from_random_bytes(&[v as u8]).unwrap()).collect();
 
-        let xl = rng.gen();
-        let xr = rng.gen();
+        //let input_rng: [u8; 32] = rng.gen();
+        let xl = F::from_random_bytes(input).unwrap();
+        let xr = F::from_random_bytes(input).unwrap();
+        //let xl = rng.gen();
+        //let xr = rng.gen();
 
         let image = mimc(xl, xr, &constants);
 

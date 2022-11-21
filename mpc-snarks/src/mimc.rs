@@ -1,4 +1,3 @@
- 
 #![warn(unused)]
 #![deny(
     trivial_casts,
@@ -8,7 +7,7 @@
     non_shorthand_field_patterns,
     renamed_and_removed_lints,
     private_in_public,
-    // unsafe_code
+    unsafe_code
 )]
 
 // For randomness (during paramgen and proof generation)
