@@ -7,6 +7,9 @@ pub mod injective_map;
 pub mod pedersen;
 pub mod poseidon;
 
+// zeroknight
+pub mod mimc;
+
 use crate::Error;
 
 #[cfg(feature = "r1cs")]
