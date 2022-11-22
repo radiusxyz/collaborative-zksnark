@@ -87,5 +87,19 @@ impl<F:PrimeField> FixedLengthCRH for MimcCRH<F> {
     }
 }
 
+#[test]
+fn test_minc() {
+    use ark_ed_on_bls12_381::Fr;
+    use ark_std::test_rng;
+    
+    let rng = &mut test_rng();
+    let params = <MimcCRH<Fr> as FixedLengthCRH>::setup(rng).unwrap();
+
+    let val = <MimcCRH<Fr> as FixedLengthCRH>::evaluate(&params, &[1,2,3])
+                                                .unwrap();
+    
+    println!("MIMC:{:?}", val);
+}
+
 
 

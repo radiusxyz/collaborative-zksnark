@@ -10,6 +10,8 @@
     unsafe_code
 )]
 
+use ark_crypto_primitives::{crh::{mimc::{MimcCRH, constraints::{MimcCRHParametersVar, MimcCRHGadget}}, bowe_hopwood::CRH}, FixedLengthCRH, FixedLengthCRHGadget};
+use ark_r1cs_std::{prelude::AllocVar, uint8::UInt8, R1CSVar};
 // For randomness (during paramgen and proof generation)
 use ark_std::rand::Rng;
 
@@ -25,7 +27,7 @@ use ark_std::test_rng;
 // We'll use these interfaces to construct our circuit.
 use ark_relations::{
     lc, ns,
-    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
+    r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable, ConstraintSystem},
 };
 
 const MIMC_ROUNDS: usize = 322;
@@ -226,4 +228,34 @@ fn test_mimc_gm_17() {
 
     println!("Average proving time: {:?} seconds", proving_avg);
     println!("Average verifying time: {:?} seconds", verifying_avg);
+}
+
+use ark_ed_on_bls12_381::Fq;
+
+pub type CRHFunction = MimcCRH<Fq>;
+pub type CRHParam = <CRHFunction as FixedLengthCRH>::Parameters;
+pub type CRHInput = [u8; 32];
+pub type CRHOutput = <CRHFunction as FixedLengthCRH>::Output;
+
+#[test] 
+fn test_mimc_evaluate() {
+    let mut rng = ark_std::test_rng();
+    let mut parameter = CRHFunction::setup(&mut rng).unwrap();
+
+    let input = [32u8; 32];
+    let out = <CRHFunction as FixedLengthCRH>::evaluate(&parameter, &input).unwrap();
+
+    println!("out : {:?}", out);
+
+    // Circuit
+    let cs = ConstraintSystem::new_ref();
+    //use ark_r1cs_std::prelude::AllocVar;
+    let param_var = MimcCRHParametersVar::new_witness(ark_relations::ns!(cs, "t"), || Ok(parameter.clone())).unwrap();
+
+    let out_var = MimcCRHGadget::evaluate(&param_var, 
+            &UInt8::new_witness_vec(ark_relations::ns!(cs, "declare_input"), &input).unwrap()).unwrap();
+
+    let out_var_val = out_var.value().unwrap();
+
+    println!("out_var : {:?}", out_var_val);
 }

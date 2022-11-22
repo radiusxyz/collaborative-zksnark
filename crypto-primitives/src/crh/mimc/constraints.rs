@@ -4,18 +4,20 @@ use crate::crh::FixedLengthCRHGadget;
 //use crate::Vec; // what for?!
 use ark_ff::{Field, PrimeField};
 
+use ark_r1cs_std::R1CSVar;
 //use ark_r1cs_std::ToConstraintFieldGadget;
 use ark_r1cs_std::fields::fp::FpVar;
-use ark_r1cs_std::prelude::{AllocVar};
+use ark_r1cs_std::prelude::{AllocVar, FieldVar};
 use ark_r1cs_std::uint8::UInt8;
-use ark_relations::r1cs::SynthesisError;
+use ark_relations::{ns, lc};
+use ark_relations::r1cs::{SynthesisError, Variable};
 
 use core::borrow::Borrow;   //Borrow
 use ark_relations::r1cs::Namespace;
 use ark_r1cs_std::prelude::AllocationMode;
 
 use super::MimcCRH;
-use super::{MimcParameters};
+use super::{MimcParameters, MIMC_ROUNDS};
 
 #[derive(Derivative, Clone)]
 pub struct MimcCRHParametersVar<F: Field> {
@@ -58,12 +60,75 @@ impl<F: PrimeField> FixedLengthCRHGadget<MimcCRH<F>, F> for MimcCRHGadget<F> {
     type ParametersVar = MimcCRHParametersVar<F>;
     // ark_r1cs_std::alloc::AllocVar<MimcParameters<F>, F>
 
+    // Todo - it only covers R1cs
     fn evaluate(
-        _parameters: &Self::ParametersVar,
-        _input: &[UInt8<F>],
+        parameters: &Self::ParametersVar,
+        input: &[UInt8<F>],
     ) -> Result<Self::OutputVar, SynthesisError> {
-        todo!()
+        //todo!()
+        
+        let cs = input.cs();
+        assert_eq!(parameters.constants.len(), MIMC_ROUNDS);
 
+        let mut xl_value = F::from_random_bytes(&input.value().unwrap());
+        let mut xl = cs.new_witness_variable(|| xl_value.ok_or(SynthesisError::AssignmentMissing))?;
+
+        let mut xr_value = F::from_random_bytes(&input.value().unwrap());
+        let mut xr = cs.new_witness_variable(|| xr_value.ok_or(SynthesisError::AssignmentMissing))?;
+
+        for i in 0..MIMC_ROUNDS {
+            let ns = ns!(cs, "round");
+            let cs = ns.cs();
+
+            let tmp_value = xl_value.map(|mut e| {
+                e.add_assign(&parameters.constants[i]);
+                e.square_in_place();
+                e
+            });
+            let tmp = 
+                cs.new_witness_variable(|| tmp_value.ok_or(SynthesisError::AssignmentMissing))?;
+            
+            cs.enforce_constraint(
+                lc!() + xl + (parameters.constants[i], Variable::One), 
+                lc!() + xl + (parameters.constants[i], Variable::One),
+                lc!() + tmp,
+            )?;
+
+            let new_xl_value = xl_value.map(|mut e| {
+                e.add_assign(&parameters.constants[i]);
+                e.mul_assign(&tmp_value.unwrap());
+                e.add_assign(&xr_value.unwrap());
+                e
+            });
+/*
+            let new_xl = if i == (MIMC_ROUNDS - 1) {
+                cs.new_input_variable(|| new_xl_value.ok_or(SynthesisError::AssignmentMissing))?;
+            } else {
+                cs.new_witness_variable(|| new_xl_value.ok_or(SynthesisError::AssignmentMissing))?;
+            };
+*/
+            let new_xl = if i == (MIMC_ROUNDS - 1) {
+                cs.new_input_variable(|| new_xl_value.ok_or(SynthesisError::AssignmentMissing))?
+            } else {
+                cs.new_witness_variable(|| new_xl_value.ok_or(SynthesisError::AssignmentMissing))?
+            };
+
+            cs.enforce_constraint(
+                lc!() + tmp,
+                lc!() + xl + (parameters.constants[i], Variable::One), 
+                lc!() + new_xl - xr,
+            )?;
+
+            // xR = xL
+            xr = xl;
+            xr_value = xl_value;
+
+            //xL = new_xL
+            xl = new_xl;
+            xl_value = new_xl_value;
+        }
+
+        Ok(FpVar::constant(xl_value.unwrap()))
         /*
         assert_eq!(parameters.constants.len(), MIMC_ROUNDS);
 
