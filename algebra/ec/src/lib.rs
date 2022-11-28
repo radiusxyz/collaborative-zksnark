@@ -256,6 +256,7 @@ pub trait AffineCurve:
 {
     const COFACTOR: &'static [u64];
     type ScalarField: PrimeField + SquareRootField;
+
     type BaseField: Field;
     type Projective: ProjectiveCurve<Affine = Self, ScalarField = Self::ScalarField, BaseField = Self::BaseField>
         + From<Self>
@@ -330,6 +331,7 @@ impl<C: ProjectiveCurve> Group for C {
     fn double_in_place(&mut self) -> &mut Self {
         <C as ProjectiveCurve>::double_in_place(self)
     }
+
 }
 
 /// Preprocess a G1 element for use in a pairing.
