@@ -48,8 +48,9 @@ pub trait Group:
     + CanonicalSerialize
     + CanonicalDeserialize
 {
+    //zeroknight
     type ScalarField: PrimeField;
-    // type ScalarField: PrimeField + Into<<Self::ScalarField as PrimeField>::BigInt>;
+    //type ScalarField: PrimeField + Into<<Self::ScalarField as PrimeField>::BigInt>;
 
     /// Returns `self + self`.
     #[must_use]

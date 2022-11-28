@@ -24,6 +24,9 @@ pub mod prf;
 pub mod signature;
 pub mod snark;
 
+// zeroknight
+pub mod encryption;
+
 pub use self::{
     commitment::CommitmentScheme,
     crh::FixedLengthCRH,
