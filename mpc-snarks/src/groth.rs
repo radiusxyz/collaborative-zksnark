@@ -1,11 +1,15 @@
 use super::silly::MySillyCircuit;
 use ark_crypto_primitives::FixedLengthCRH;
-use ark_ec::PairingEngine;
+use ark_crypto_primitives::encryption::elgamal::ElGamal;
+use ark_crypto_primitives::encryption::{sub_strings, AsymmetricEncryptionScheme};
+use ark_ec::{PairingEngine, ProjectiveCurve, AffineCurve};
+use ark_ff::Fp256;
 use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey, create_random_proof};
 use ark_sponge::poseidon::PoseidonSponge;
 use ark_std::{test_rng, UniformRand};
 use mpc_algebra::*;
 use mpc_algebra::Reveal;
+use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective as JubJub, Fq};
 
 pub mod prover;
 pub mod r1cs_to_qap;
@@ -13,6 +17,7 @@ pub mod r1cs_to_qap;
 // zeroknight
 //use super::poseidon::PoseidonCircuit;
 use super::poseidon::*;
+
 
 /* == temporary commented out..
 
@@ -125,6 +130,63 @@ pub fn verify_proof<E: PairingEngine>(
 }
 
 */
+
+use mpc_snarks::elgamal::*;
+use ark_crypto_primitives::encryption::elgamal::Randomness;
+pub fn mpc_test_prove_and_verify_on_elgamal( n_iters: usize) {
+    
+    let rng = &mut test_rng();
+
+    type PlainEnc = ElGamal<JubJub>;
+
+    // compute primitive result
+    let parameters = PlainEnc::setup(rng).unwrap();
+    let (pk, _) = PlainEnc::keygen(&parameters, rng).unwrap();
+
+    let plain_text = "012345678901234567890123456789012345678901";
+    
+    let msg_vec = sub_strings(plain_text, 32);
+    let mut msg_affine_vec : Vec<<JubJub as ProjectiveCurve>::Affine> = vec!();
+    let msg_iter = msg_vec.iter();
+
+    for msg in msg_iter {
+        let mut bytes = hex::decode(*msg).unwrap();
+        bytes.reverse();
+        let msg_affine = <JubJub as ProjectiveCurve>::Affine::from_random_bytes(&bytes).unwrap();
+        let msg_var = msg_affine.mul_by_cofactor();
+        msg_affine_vec.push(msg_var);
+    }
+
+    let randomness = Randomness::rand(rng);
+    let primitive_result_vec = PlainEnc::encrypt(&parameters, &pk, msg_affine_vec.clone(), &randomness).unwrap();
+    println!("plain output: {:#?}", primitive_result_vec);
+
+
+    // build the circuit
+    let circuit = ElGamalCircuit {
+        parameters,
+        input: msg_affine_vec,
+        output: primitive_result_vec.clone(),
+        randomness,
+        public_key: pk,
+    };
+
+    let rng = &mut test_rng();
+    let zk_param = generate_random_parameters::<ark_bls12_381::Bls12_381,_,_>(circuit.clone(), rng).unwrap();
+
+    // proving
+    let rng2 = &mut test_rng();
+    let proof = create_random_proof(circuit.clone(), &zk_param, rng2).unwrap();
+
+    println!("proof: {:#?}", proof);
+
+    // verifying
+    let pvk = prepare_verifying_key(&zk_param.vk);
+    // let res = verify_proof(&pvk, &proof, &primitive_result_vec).unwrap();
+
+    // assert!(res);
+    
+    }
 
 use ark_bls12_381::Fr;
 use ark_sponge::{CryptographicSponge, FieldBasedCryptographicSponge};        // new from PoseidonSponge
