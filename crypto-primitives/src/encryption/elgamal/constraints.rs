@@ -331,10 +331,10 @@ mod test {
 
         for i in 0..expected_var_vec.len() {
             expected_var_vec[i].enforce_equal(&result_var_vec[i]).unwrap(); 
+            assert_eq!(primitive_result_vec[i].0.into_projective(), result_var_vec[i].c1.value().unwrap());
+            assert_eq!(primitive_result_vec[i].1.into_projective(), result_var_vec[i].c2.value().unwrap());
         }
         
-        // assert_eq!(primitive_result.0.into_projective(), result_var.c1.value().unwrap());
-        // assert_eq!(primitive_result.1.into_projective(), result_var.c2.value().unwrap());
         assert!(cs.is_satisfied().unwrap());
     }
 }
