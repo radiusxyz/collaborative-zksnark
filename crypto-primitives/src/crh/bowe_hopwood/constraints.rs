@@ -118,6 +118,7 @@ mod test {
     use ark_r1cs_std::{alloc::AllocVar, uint8::UInt8, R1CSVar};
     use ark_relations::r1cs::{ConstraintSystem, ConstraintSystemRef};
     use ark_std::test_rng;
+    use ark_std::vec::Vec;
 
     type TestCRH = CRH<EdwardsParameters, Window>;
     type TestCRHGadget = CRHGadget<EdwardsParameters, FqVar>;
