@@ -7,6 +7,7 @@ pub mod elgamal;
 
 use crate::Error;
 use ark_std::rand::Rng;
+use ark_std::vec::Vec;
 
 pub trait AsymmetricEncryptionScheme {
     type Parameters;
@@ -26,13 +27,29 @@ pub trait AsymmetricEncryptionScheme {
     fn encrypt(
         pp: &Self::Parameters,
         pk: &Self::PublicKey,
-        message: &Self::Plaintext,
+        message: Vec<Self::Plaintext>,
         r: &Self::Randomness,
-    ) -> Result<Self::Ciphertext, Error>;
+    ) -> Result<Vec<Self::Ciphertext>, Error>;
 
     fn decrypt(
         pp: &Self::Parameters,
         sk: &Self::SecretKey,
-        ciphertext: &Self::Ciphertext,
-    ) -> Result<Self::Plaintext, Error>;
+        ciphertext: Vec<Self::Ciphertext>,
+    ) -> Result<Vec<Self::Plaintext>, Error>;
+}
+
+pub fn sub_strings(string: &str, sub_len: usize) -> Vec<&str> {
+    let mut subs = Vec::with_capacity(string.len() / sub_len);
+    let mut iter = string.chars();
+    let mut pos = 0;
+
+    while pos < string.len() {
+        let mut len = 0;
+        for ch in iter.by_ref().take(sub_len) {
+            len += ch.len_utf8();
+        }
+        subs.push(&string[pos..pos + len]);
+        pos += len;
+    }
+    subs
 }

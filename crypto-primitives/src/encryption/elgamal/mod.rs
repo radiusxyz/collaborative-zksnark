@@ -7,6 +7,7 @@ use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::{fields::PrimeField, UniformRand};
 use ark_std::marker::PhantomData;
 use ark_std::rand::Rng;
+use ark_std::vec::Vec;
 
 pub struct ElGamal<C: ProjectiveCurve> {
     _group: PhantomData<C>,
@@ -75,48 +76,59 @@ where
     fn encrypt(
         pp: &Self::Parameters,
         pk: &Self::PublicKey,
-        message: &Self::Plaintext,
+        message: Vec<Self::Plaintext>,
         r: &Self::Randomness,
-    ) -> Result<Self::Ciphertext, Error> {
+    ) -> Result<Vec<Self::Ciphertext>, Error> {
+        let msg_iter = message.iter();
         // compute s = r*pk
         let s = pk.scalar_mul(r.0).into();  // zeroknight mul -> scalar_mul
-
         // compute c1 = r*generator
         let c1 = pp.generator.scalar_mul(r.0).into();   // zeroknight mul -> scalar_mul
+        let mut cipher_vec = vec!();
 
-        // compute c2 = m + s
-        let c2 = *message + s;
+        for msg in msg_iter {
+            // compute c2 = m + s
+            let c2 = *msg + s;
+            cipher_vec.push((c1, c2));
+        }
 
-        Ok((c1, c2))
+        Ok(cipher_vec)
     }
 
     fn decrypt(
         _pp: &Self::Parameters,
         sk: &Self::SecretKey,
-        ciphertext: &Self::Ciphertext,
-    ) -> Result<Self::Plaintext, Error> {
-        let c1: <C as ProjectiveCurve>::Affine = ciphertext.0;
-        let c2: <C as ProjectiveCurve>::Affine = ciphertext.1;
+        ciphertext: Vec<Self::Ciphertext>,
+    ) -> Result<Vec<Self::Plaintext>, Error> {
+        let cipher_iter = ciphertext.iter();
+        let mut plain_vec = vec!();
 
-        // compute s = secret_key * c1
-        let s = c1.scalar_mul(sk.0);    // zeroknight mul -> scalar_mul
-        let s_inv = -s;
+        for cipher in cipher_iter {
+            let c1: <C as ProjectiveCurve>::Affine = cipher.0;
+            let c2: <C as ProjectiveCurve>::Affine = cipher.1;
+    
+            // compute s = secret_key * c1
+            let s = c1.scalar_mul(sk.0);    // zeroknight mul -> scalar_mul
+            let s_inv = -s;
+    
+            // compute message = c2 - s
+            let m = c2 + s_inv.into_affine();
+            plain_vec.push(m);
+        }
 
-        // compute message = c2 - s
-        let m = c2 + s_inv.into_affine();
-
-        Ok(m)
+        Ok(plain_vec)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use ark_std::{test_rng, UniformRand};
+    use ark_ec::{AffineCurve, ProjectiveCurve};
+    use ark_std::{test_rng, UniformRand, vec::Vec};
 
     use ark_ed_on_bls12_381::EdwardsProjective as JubJub;
 
     use crate::encryption::elgamal::{ElGamal, Randomness};
-    use crate::encryption::AsymmetricEncryptionScheme;
+    use crate::encryption::{AsymmetricEncryptionScheme, sub_strings};
 
     #[test]
     fn test_elgamal_encryption() {
@@ -127,13 +139,33 @@ mod test {
         let (pk, sk) = ElGamal::<JubJub>::keygen(&parameters, rng).unwrap();
 
         // get a random msg and encryption randomness
-        let msg = JubJub::rand(rng).into();
+        // let msg = JubJub::rand(rng).into();
+        let plain_text = "012345678901234567890123456789012345678901";
+        
+        let msg_vec = sub_strings(plain_text, 32);
+        let mut msg_affine_vec : Vec<<JubJub as ProjectiveCurve>::Affine> = vec!();
+        let msg_iter = msg_vec.iter();
+
+        for msg in msg_iter {
+            let mut bytes = hex::decode(*msg).unwrap();
+            bytes.reverse();
+            let msg_affine = <JubJub as ProjectiveCurve>::Affine::from_random_bytes(&bytes).unwrap();
+            let msg_var = msg_affine.mul_by_cofactor();
+            msg_affine_vec.push(msg_var);
+        }
+
         let r = Randomness::rand(rng);
 
         // encrypt and decrypt the message
-        let cipher = ElGamal::<JubJub>::encrypt(&parameters, &pk, &msg, &r).unwrap();
-        let check_msg = ElGamal::<JubJub>::decrypt(&parameters, &sk, &cipher).unwrap();
+        let cipher_vec = ElGamal::<JubJub>::encrypt(&parameters, &pk, msg_affine_vec.clone(), &r).unwrap();
+        println!("{:?}", cipher_vec);
+        let check_msg_vec = ElGamal::<JubJub>::decrypt(&parameters, &sk, cipher_vec).unwrap();
 
-        assert_eq!(msg, check_msg);
+        assert_eq!(msg_affine_vec.len(), check_msg_vec.len());
+
+        for i in 0..msg_affine_vec.len() {
+            assert_eq!(msg_affine_vec[i], check_msg_vec[i]);
+        }
+        
     }
 }
