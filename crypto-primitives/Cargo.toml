@@ -15,6 +15,8 @@ edition = "2018"
 ################################# Dependencies ################################
 
 [dependencies]
+hex = "0.4.3"
+
 ark-ff = { path = "../algebra/ff", version = "^0.2.0", default-features = false}
 ark-ec = { path = "../algebra/ec", version = "^0.2.0", default-features = false }
 ark-std = { path = "../utils", default-features = false }
@@ -37,7 +39,7 @@ tracing = { version = "0.1", default-features = false, features = [ "attributes"
 #ark-sponge = { version = "^0.3.0", default-features = false }
 
 [features]
-default = ["std"]
+default = ["r1cs"]
 std = [ "ark-ff/std", "ark-ec/std", "ark-std/std", "ark-relations/std" ]
 print-trace = [ "ark-std/print-trace" ]
 parallel = [ "std", "rayon", "ark-ec/parallel", "ark-std/parallel", "ark-ff/parallel" ]
@@ -45,7 +47,7 @@ r1cs = [ "ark-r1cs-std", "tracing", "ark-nonnative-field" ]
 
 [dev-dependencies]
 #ark-ed-on-bls12-381 = { version = "^0.2.0", default-features = false, features = [ "r1cs" ] }
-ark-ed-on-bls12-381 = { path = "../curves/ed_on_bls12_381/", default-features = false }
+ark-ed-on-bls12-381 = { path = "../curves/ed_on_bls12_381/", default-features = false, features = [ "r1cs" ] }
 
 ark-bls12-377 = { version = "^0.2.0", default-features = false, features = [ "curve", "r1cs" ] }
 ark-mnt4-298 = { version = "^0.2.0", default-features = false, features = [ "curve", "r1cs" ] }
