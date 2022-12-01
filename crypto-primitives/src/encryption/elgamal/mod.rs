@@ -12,7 +12,8 @@ use ark_std::vec::Vec;
 pub struct ElGamal<C: ProjectiveCurve> {
     _group: PhantomData<C>,
 }
-
+#[derive(Derivative)]
+#[derivative(Clone(bound = "C: ProjectiveCurve"))]
 pub struct Parameters<C: ProjectiveCurve> {
     pub generator: C::Affine,
 }
@@ -21,6 +22,8 @@ pub type PublicKey<C> = <C as ProjectiveCurve>::Affine;
 
 pub struct SecretKey<C: ProjectiveCurve>(pub C::ScalarField);
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = "C: ProjectiveCurve"))]
 pub struct Randomness<C: ProjectiveCurve>(pub C::ScalarField);
 
 impl<C: ProjectiveCurve> UniformRand for Randomness<C> {
