@@ -232,6 +232,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::encryption::constraints::AsymmetricEncryptionGadget;
+    use ark_ec::{AffineCurve, ProjectiveCurve};
     use ark_std::{test_rng, UniformRand};
 
     use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective as JubJub, Fq};
@@ -251,7 +252,12 @@ mod test {
         // compute primitive result
         let parameters = MyEnc::setup(rng).unwrap();
         let (pk, _) = MyEnc::keygen(&parameters, rng).unwrap();
-        let msg = JubJub::rand(rng).into();
+
+        let mut bytes = hex::decode("01234567890123456789012345678901").unwrap();
+        bytes.reverse();
+        let msg_affine = <JubJub as ProjectiveCurve>::Affine::from_random_bytes(&bytes).unwrap();
+        let msg = msg_affine.mul_by_cofactor();
+
         let randomness = Randomness::rand(rng);
         let primitive_result = MyEnc::encrypt(&parameters, &pk, &msg, &randomness).unwrap();
 
@@ -293,10 +299,11 @@ mod test {
                 || Ok(&primitive_result),
             )
             .unwrap();
-        expected_var.enforce_equal(&result_var).unwrap();
 
-        assert_eq!(primitive_result.0, result_var.c1.value().unwrap());
-        assert_eq!(primitive_result.1, result_var.c2.value().unwrap());
+        expected_var.enforce_equal(&result_var).unwrap(); 
+
+        assert_eq!(primitive_result.0.into_projective(), result_var.c1.value().unwrap());
+        assert_eq!(primitive_result.1.into_projective(), result_var.c2.value().unwrap());
         assert!(cs.is_satisfied().unwrap());
     }
 }
