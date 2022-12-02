@@ -182,9 +182,18 @@ pub fn mpc_test_prove_and_verify_on_elgamal( n_iters: usize) {
 
     // verifying
     let pvk = prepare_verifying_key(&zk_param.vk);
-    // let res = verify_proof(&pvk, &proof, &primitive_result_vec).unwrap();
+    let mut public_inputs = vec!();
+    for affine in primitive_result_vec {
+        public_inputs.push(affine.0.x);
+        public_inputs.push(affine.0.y);
+        public_inputs.push(affine.1.x);
+        public_inputs.push(affine.1.y);
+    }
 
-    // assert!(res);
+    let res = verify_proof(&pvk, &proof, &public_inputs).unwrap();
+    println!("verify: {:?}", res);
+
+    assert!(res);
     
     }
 
