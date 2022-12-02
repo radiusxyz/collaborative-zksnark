@@ -20,7 +20,7 @@ incremental = true
 debug-assertions = false
 
 [profile.dev]
-opt-level = 0
+opt-level = 3
 panic = 'abort'
 
 [profile.test]
