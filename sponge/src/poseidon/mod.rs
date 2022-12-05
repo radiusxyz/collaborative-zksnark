@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use crate::{
     batch_field_cast, squeeze_field_elements_with_sizes_default_impl, Absorb, CryptographicSponge,
     FieldBasedCryptographicSponge, FieldElementSize, SpongeExt,
@@ -14,8 +16,10 @@ pub mod constraints;
 #[cfg(test)]
 mod tests;
 
+mod round_constants;
+
 #[derive(Clone)]
-enum PoseidonSpongeMode {
+pub enum PoseidonSpongeMode {   // zeroknight - made it public
     Absorbing { next_absorb_index: usize },
     Squeezing { next_squeeze_index: usize },
 }
@@ -84,8 +88,8 @@ impl<F: PrimeField> PoseidonSponge<F> {
         }
         state.clone_from_slice(&new_state[..state.len()])
     }
-
-    fn permute(&mut self) {
+     
+    pub fn permute(&mut self) {
         let full_rounds_over_2 = self.full_rounds / 2;
         let mut state = self.state.clone();
         for i in 0..full_rounds_over_2 {
@@ -372,8 +376,8 @@ impl<F: PrimeField> FieldBasedCryptographicSponge<F> for PoseidonSponge<F> {
 #[derive(Clone)]
 /// Stores the state of a Poseidon Sponge. Does not store any parameter.
 pub struct PoseidonSpongeState<F: PrimeField> {
-    state: Vec<F>,
-    mode: PoseidonSpongeMode,
+    pub state: Vec<F>,
+    pub mode: PoseidonSpongeMode,   // zeroknight - made it public
 }
 
 impl<CF: PrimeField> SpongeExt for PoseidonSponge<CF> {

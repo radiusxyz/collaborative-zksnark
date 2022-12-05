@@ -3,6 +3,8 @@ mod mimc;
 
 mod silly;
 
+mod encryption;
+
 #[cfg(test)]
 mod tests {
     #[test]
