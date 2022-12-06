@@ -16,7 +16,15 @@ pub mod constraints;
 #[cfg(test)]
 mod tests;
 
+// zeroknight from dusk
 mod round_constants;
+mod mds_matrix;
+// Maximum input width for the rounds
+pub const WIDTH: usize = 5;
+// Total amount of full rounds. "RF"
+pub const TOTAL_FULL_ROUNDS: usize = 8;
+// Total amount of partial rounds. "Rq"
+pub const PARTIAL_ROUNDS: usize = 59;
 
 #[derive(Clone)]
 pub enum PoseidonSpongeMode {   // zeroknight - made it public
