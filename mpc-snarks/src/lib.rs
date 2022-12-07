@@ -1,6 +1,8 @@
 mod poseidon;
 mod mimc;
 
+pub mod elgamal;
+
 mod silly;
 
 #[cfg(test)]

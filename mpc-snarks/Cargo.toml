@@ -54,6 +54,8 @@ merlin = "3"
 sha2 = "0.9"
 blake2 = "0.9"
 
+hex = "0.4.3"
+
 [[bin]]
 name = "client"
 path = "src/client.rs"
@@ -62,5 +64,11 @@ path = "src/client.rs"
 name = "proof"
 path = "src/proof.rs"
 
+[profile.dev]
+debug = true
+opt-level = 3
+
 [profile.release]
 debug = true
+opt-level = 3
+

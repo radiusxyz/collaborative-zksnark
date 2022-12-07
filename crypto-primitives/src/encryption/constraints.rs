@@ -3,7 +3,7 @@ use crate::encryption::AsymmetricEncryptionScheme;
 use ark_r1cs_std::prelude::*;
 use ark_relations::r1cs::SynthesisError;
 use core::fmt::Debug;
-
+use ark_std::vec::Vec;
 use ark_ff::fields::Field;
 
 pub trait AsymmetricEncryptionGadget<C: AsymmetricEncryptionScheme, ConstraintF: Field> {
@@ -19,8 +19,8 @@ pub trait AsymmetricEncryptionGadget<C: AsymmetricEncryptionScheme, ConstraintF:
 
     fn encrypt(
         parameters: &Self::ParametersVar,
-        message: &Self::PlaintextVar,
+        message: Vec<Self::PlaintextVar>,
         randomness: &Self::RandomnessVar,
         public_key: &Self::PublicKeyVar,
-    ) -> Result<Self::OutputVar, SynthesisError>;
+    ) -> Result<Vec<Self::OutputVar>, SynthesisError>;
 }

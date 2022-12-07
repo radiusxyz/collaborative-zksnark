@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 //use core::ops::{MulAssign, AddAssign};
 use crate::crh::FixedLengthCRHGadget;
-//use crate::Vec; // what for?!
+use crate::Vec;
 use ark_ff::{Field, PrimeField};
 
 use ark_r1cs_std::R1CSVar;

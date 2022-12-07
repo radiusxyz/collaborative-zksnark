@@ -393,6 +393,7 @@ impl<F: PrimeField> PRFGadget<Blake2s, F> for Blake2sGadget {
 mod test {
     use ark_ed_on_bls12_381::Fq as Fr;
     use ark_std::rand::Rng;
+    use ark_std::vec::Vec;
 
     use crate::prf::blake2s::{constraints::evaluate_blake2s, Blake2s as B2SPRF};
     use ark_relations::r1cs::ConstraintSystem;
