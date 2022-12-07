@@ -17,8 +17,8 @@ pub mod constraints;
 mod tests;
 
 // zeroknight from dusk
-mod round_constants;
-mod mds_matrix;
+pub mod round_constants;
+pub mod mds_matrix;
 // Maximum input width for the rounds
 pub const WIDTH: usize = 5;
 // Total amount of full rounds. "RF"
@@ -207,7 +207,8 @@ impl<F: PrimeField> PoseidonParameters<F> {
         // shape check
         assert_eq!(ark.len() as u32, full_rounds + partial_rounds);
         for item in &ark {
-            assert_eq!(item.len(), 3);
+            //assert_eq!(item.len(), 3);    // zeroknight
+            assert_eq!(item.len(), WIDTH);
         }
         Self {
             full_rounds,

@@ -30,7 +30,7 @@ use ark_serialize::{
 #[macro_use]
 use lazy_static::lazy_static;
 
-use crate::poseidon::poseidon_parameters_for_test_s;
+use crate::poseidon::{poseidon_parameters_for_test_s, poseidon_parameters_for_encryption};
 
 const MESSAGE_CAPACITY: usize = 2;
 const CIPHER_SIZE: usize = MESSAGE_CAPACITY + 1;
@@ -207,7 +207,8 @@ impl PoseidonEncryption
         let mut index : usize = 0;
         let mut internal_state = PoseidonEncryption::initial_state(&secret, &nonce).to_vec();
 
-        let parameter = poseidon_parameters_for_test_s::<Fq>();
+        //let parameter = poseidon_parameters_for_test_s::<Fq>();
+        let parameter = poseidon_parameters_for_encryption::<Fq>();
         /*let mut state = PoseidonSpongeState::<Fq>{
             state: internal_state,
             mode: PoseidonSpongeMode::Absorbing { next_absorb_index: index },

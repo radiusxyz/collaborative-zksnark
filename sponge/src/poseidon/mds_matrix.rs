@@ -1,13 +1,13 @@
 
 use super::round_constants::u64_from_buffer;
 use super::WIDTH;
-use ark_ed_on_bls12_381::Fq;
+use ark_ed_on_bls12_381::{Fq, Fr};
 use ark_ff::{Zero, PrimeField};
 
-pub fn mds_matrix() -> [[Fq; WIDTH]; WIDTH] {
+pub fn mds_matrix() -> [[Fr; WIDTH]; WIDTH] {
 
     let bytes = include_bytes!("./assets/mds.bin");
-    let mut mds = [[Fq::zero(); WIDTH]; WIDTH];
+    let mut mds = [[Fr::zero(); WIDTH]; WIDTH];
 
     let mut k = 0;
     let mut i = 0;
@@ -23,7 +23,7 @@ pub fn mds_matrix() -> [[Fq; WIDTH]; WIDTH] {
             let list = [a.to_be_bytes(), b.to_be_bytes(), c.to_be_bytes(), d.to_be_bytes()].concat();
 
             k += 32;
-            mds[i][j] = Fq::from_le_bytes_mod_order(list.as_slice());
+            mds[i][j] = Fr::from_le_bytes_mod_order(list.as_slice());
             j += 1;
 
         }
@@ -35,7 +35,7 @@ pub fn mds_matrix() -> [[Fq; WIDTH]; WIDTH] {
 #[test]
 fn test() {
     let matrix = mds_matrix();
-    let zero = Fq::zero();
+    let zero = Fr::zero();
     let has_zero = matrix.iter().any(|&x| 
         x.iter().any(|&y| y == zero));
 
