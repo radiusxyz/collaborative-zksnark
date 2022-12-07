@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use crate::{
     batch_field_cast, squeeze_field_elements_with_sizes_default_impl, Absorb, CryptographicSponge,
     FieldBasedCryptographicSponge, FieldElementSize, SpongeExt,
@@ -14,8 +16,18 @@ pub mod constraints;
 #[cfg(test)]
 mod tests;
 
+// zeroknight from dusk
+pub mod round_constants;
+pub mod mds_matrix;
+// Maximum input width for the rounds
+pub const WIDTH: usize = 5;
+// Total amount of full rounds. "RF"
+pub const TOTAL_FULL_ROUNDS: usize = 8;
+// Total amount of partial rounds. "Rq"
+pub const PARTIAL_ROUNDS: usize = 59;
+
 #[derive(Clone)]
-enum PoseidonSpongeMode {
+pub enum PoseidonSpongeMode {   // zeroknight - made it public
     Absorbing { next_absorb_index: usize },
     Squeezing { next_squeeze_index: usize },
 }
@@ -84,8 +96,8 @@ impl<F: PrimeField> PoseidonSponge<F> {
         }
         state.clone_from_slice(&new_state[..state.len()])
     }
-
-    fn permute(&mut self) {
+     
+    pub fn permute(&mut self) {
         let full_rounds_over_2 = self.full_rounds / 2;
         let mut state = self.state.clone();
         for i in 0..full_rounds_over_2 {
@@ -195,7 +207,8 @@ impl<F: PrimeField> PoseidonParameters<F> {
         // shape check
         assert_eq!(ark.len() as u32, full_rounds + partial_rounds);
         for item in &ark {
-            assert_eq!(item.len(), 3);
+            //assert_eq!(item.len(), 3);    // zeroknight
+            assert_eq!(item.len(), WIDTH);
         }
         Self {
             full_rounds,
@@ -372,8 +385,8 @@ impl<F: PrimeField> FieldBasedCryptographicSponge<F> for PoseidonSponge<F> {
 #[derive(Clone)]
 /// Stores the state of a Poseidon Sponge. Does not store any parameter.
 pub struct PoseidonSpongeState<F: PrimeField> {
-    state: Vec<F>,
-    mode: PoseidonSpongeMode,
+    pub state: Vec<F>,
+    pub mode: PoseidonSpongeMode,   // zeroknight - made it public
 }
 
 impl<CF: PrimeField> SpongeExt for PoseidonSponge<CF> {

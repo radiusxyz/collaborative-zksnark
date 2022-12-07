@@ -9,7 +9,7 @@ use ark_crypto_primitives::{
     crh::poseidon::constraints::{PoseidonRoundParamsVar, PoseidonCRHGadget},
 };
 
-use ark_ff::{Field, PrimeField, ToConstraintField, UniformRand};
+use ark_ff::{Field, PrimeField, ToConstraintField, UniformRand, BigInteger};
 
 use ark_relations::{
     r1cs::{SynthesisError,
@@ -1188,6 +1188,33 @@ pub fn poseidon_parameters_for_test_s<F: PrimeField>() -> PoseidonParameters<F> 
         ark,
     )
     
+}
+
+use ark_sponge::poseidon::{
+    round_constants::round_constants,
+    round_constants::round_constants_4,
+    mds_matrix::mds_matrix,
+};
+
+
+pub fn poseidon_parameters_for_encryption<F: PrimeField>() -> PoseidonParameters<F> {
+    let alpha = 17;
+    let mds = mds_matrix();
+    let ark = round_constants_4();
+    let full_rounds = 8;
+    let partial_rounds =  59;
+    
+    let mds_vec : Vec<_> = mds.iter().map(|&e| e.iter().map(|&t| F::from_be_bytes_mod_order(t.into_repr().to_bytes_be().as_slice())).collect()).collect();
+    let ark_vec : Vec<_> = ark.iter().map(|&e| e.iter().map(|&t| F::from_be_bytes_mod_order(t.into_repr().to_bytes_be().as_slice())).collect()).collect();
+
+    PoseidonParameters::new(
+        full_rounds,
+        partial_rounds,
+        alpha,
+        mds_vec,
+        ark_vec,
+    )
+
 }
 
 

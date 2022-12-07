@@ -5,6 +5,8 @@ pub mod elgamal;
 
 mod silly;
 
+mod encryption;
+
 #[cfg(test)]
 mod tests {
     #[test]

@@ -5,6 +5,9 @@ pub use constraints::*;
 
 pub mod elgamal;
 
+// zeroknight
+pub mod poseidon;
+
 use crate::Error;
 use ark_std::rand::Rng;
 use ark_std::vec::Vec;

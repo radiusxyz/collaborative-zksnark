@@ -27,6 +27,10 @@ derivative = { version = "2.1.1", features = [ "use_core" ] }
 digest = { version = "0.9.0", default_features = false }
 rand_chacha = { version = "0.3.0", default-features = false }
 
+# zeroknight
+ark-ed-on-bls12-381 = { path = "../curves/ed_on_bls12_381", version = "0.2.0", default-features = false , features = [ "r1cs" ]} #zeroknight - constraints
+
+
 # Dependencies for r1cs
 ark-nonnative-field = { path="../nonnative", version = "^0.2.0", default-features = false, optional = true }
 ark-r1cs-std = { path="../r1cs-std", version = "^0.2.0", default-features = false, optional = true }
