@@ -1,6 +1,7 @@
 use super::silly::MySillyCircuit;
 use ark_crypto_primitives::FixedLengthCRH;
 use ark_ec::PairingEngine;
+use ark_ff::PrimeField;
 use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey, create_random_proof};
 use ark_sponge::poseidon::PoseidonSponge;
 use ark_std::{test_rng, UniformRand};
@@ -13,6 +14,7 @@ pub mod r1cs_to_qap;
 // zeroknight
 //use super::poseidon::PoseidonCircuit;
 use super::poseidon::*;
+//use super::silly::{PoseidonMpcCircuit};
 
 /* == temporary commented out..
 
@@ -200,4 +202,117 @@ pub fn mpc_test_prove_and_verify<E: PairingEngine, S: PairingShare<E>>(n_iters: 
         assert!(verify_proof(&pvk, &proof, &[pub_c]).unwrap());
         assert!(!verify_proof(&pvk, &proof, &[pub_a]).unwrap());
     }
+}
+
+//====================================================================//
+
+pub fn mpc_test_prove_and_verify_on_poseidon_mpc<E: PairingEngine, S:PairingShare<E>>(n_iters: usize) {
+
+    const INPTEXT:&str = "Input...";
+    const LEN: usize = INPTEXT.len();
+
+    let input = [                           // length : 64 SIZEOFINPUT
+        INPTEXT.as_ref(),
+        [0u8; SIZEOFINPUT - LEN].as_ref(),  
+    ].concat();
+    let mut input_vec = Vec::<E::Fr>::new(); 
+    let inp : Vec<u8> = input.to_vec();
+    
+    input_vec = inp.iter().map( |v| E::Fr::from_be_bytes_mod_order(&[*v])).collect();
+
+    // elements in this parameter are 'MpcField' // MpcField::<E::Fr, S::FrShare>
+    let parameter = poseidon_parameters_for_encryption::<E::Fr>();
+
+    let mut native_sponge = PoseidonSponge::<E::Fr>::new(&parameter);
+    native_sponge.absorb(&inp);
+    let out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+    println!("out = {:?}", out);
+
+/*
+    // circuit is not implemented based on Field which needs for MpcField
+    // build the circuit
+    let circuit = SPNGMpcCircuit::<MpcField::<E::Fr, S::FrShare>> { //SPNGMpcCircuit or PoseidonMpcCircuit
+        param: None,
+        input: None,
+        output: None,
+    };
+    let rng = &mut test_rng();
+    let zk_param = generate_random_parameters::<E,_,_>(circuit, rng).unwrap();
+
+    let pvk = prepare_verifying_key::<E>(&zk_param.vk);
+    let mpc_params = ProvingKey::from_public(zk_param);
+
+    let mpc_proof = prover::create_random_proof::<MpcPairingEngine<E, S>,_,_>
+                                            (circuit, &mpc_params, rng).unwrap();
+
+    let proof = mpc_proof.reveal();
+    
+    assert!(verify_proof(&pvk, &proof, &[]).unwrap());
+    
+*/
+}
+
+pub fn mpc_test_prove_and_verify_test<E: PairingEngine, S: PairingShare<E>>(n_iters: usize) {
+
+    let rng = &mut test_rng();
+
+    let mut input = Vec::new();
+    input.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
+
+    //let mut output = Vec::new();
+    //output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
+    let mut output = MpcField::<E::Fr, S::FrShare>::rand(rng);
+
+    let params = 
+        generate_random_parameters::<E, _,_>(PoseidonMpcCircuit{param: None, input:None, output:None}, rng).unwrap();
+
+    let pvk = prepare_verifying_key::<E>(&params.vk);
+    let mpc_params = ProvingKey::from_public(params);
+
+    let mpc_proof = prover::create_random_proof::<MpcPairingEngine<E,S>,_,_>(
+        PoseidonMpcCircuit{
+            param: None,
+            input: Some(input),
+            output: Some(output.clone()),
+        },
+        &mpc_params,
+        rng,  
+    ).unwrap();
+
+    let proof = mpc_proof.reveal();
+    let pub_out = output.reveal();
+
+    assert!(verify_proof(&pvk, &proof, &[pub_out]).unwrap());
+    
+}
+
+#[test]
+fn test_poseidon_with_primefield() {
+
+    type testFr = ark_ed_on_bls12_381::Fr;
+
+    const INPTEXT:&str = "Input...";
+    const LEN: usize = INPTEXT.len();
+
+    let input = [                           // length : 64 SIZEOFINPUT
+        INPTEXT.as_ref(),
+        [0u8; SIZEOFINPUT - LEN].as_ref(),  
+    ].concat();
+    let mut input_vec = Vec::<testFr>::new(); 
+    let inp : Vec<u8> = input.to_vec();
+    
+    input_vec = inp.iter().map( |v| testFr::from_be_bytes_mod_order(&[*v])).collect();
+
+    println!("u8 : {:?}", input);
+    println!("PrimeField : {:?}", input_vec);
+
+    let parameter = poseidon_parameters_for_encryption::<testFr>();
+
+    let mut native_sponge = PoseidonSponge::<testFr>::new(&parameter);
+    native_sponge.absorb(&input_vec);
+
+    let out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+
+    println!("Output : {:?}", out);
+
 }

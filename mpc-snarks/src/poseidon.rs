@@ -1270,4 +1270,121 @@ fn spng_circuit_helper(
     Ok(())
 }
 
+//==========================================//
+pub type SPNGMpcFunction<F> = PoseidonSponge<F>;
+pub type SPNGMpcParam<F> = <SPNGMpcFunction<F> as CryptographicSponge>::Parameters; 
+pub type SPNGMpcInput<F> = Vec<F>;
+pub type SPNGMpcOutput<F> = Vec<F>;
 
+//pub struct SPNGMpcCircuit<F, C> 
+//    where F: PrimeField, C: PrimeField,
+#[derive(Clone)]
+pub struct SPNGMpcCircuit<F> 
+    where F: PrimeField
+{
+    pub param: SPNGMpcParam<F>,
+    pub input: SPNGMpcInput<F>,
+    pub output: SPNGMpcOutput<F>,
+}
+
+//impl<F:PrimeField, C: PrimeField> ConstraintSynthesizer<F> for SPNGMpcCircuit<F,C> {
+impl<F:PrimeField> ConstraintSynthesizer<F> for SPNGMpcCircuit<F> {
+    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+        let pos_param_var = PoseidonSpongeVar::<F>::new(cs.clone(), &self.param);
+        
+        spng_mpc_circuit_helper(self.input, &self.output, cs, pos_param_var)?;
+
+        Ok(())
+    }
+}
+
+//fn spng_mpc_circuit_helper<F,C>(
+fn spng_mpc_circuit_helper<F>(
+    input: SPNGMpcInput<F>,
+    output: &SPNGMpcOutput<F>,
+    cs: ConstraintSystemRef<F>,
+    pos_param_var: PoseidonSpongeVar<F>) -> Result<(), SynthesisError>
+where F:PrimeField,
+{
+    let absorb1 = input.clone();
+    let absorb_val : Vec<u8> = input.iter().map(|t| t.into_repr().to_bytes_be()[31]).collect();    // only u8 works..
+//    let absorb3 : Vec<u8> = absorb2.iter().flat_map(|f| f.iter().map(|a| *a)).collect();   //Vec<Vec<u8>>
+    let absorb1_var : Vec<_> = absorb1.iter()
+                .map(|v| {
+                    //let mut val = v.into_repr().to_bytes_be()[31];  // 256 bits.. big endian..
+                    //UInt8::new_witness(ark_relations::ns!(cs, "absorb1"), || Ok(val))
+                    
+                    //cs.new_witness_variable(|| Ok(*v) ).unwrap()
+                    FpVar::new_witness(ark_relations::ns!(cs, "absorb1"), 
+                                        || Ok(*v)).unwrap()
+                }).collect();
+    let absorb_var: Vec<_> = absorb_val.iter()
+                .map(|v| UInt8::new_witness(ark_relations::ns!(cs, "absorb1"), 
+                                                    || Ok(*v)).unwrap()).collect();
+    
+    let sponge_params = poseidon_parameters_for_test_s::<F>();
+
+    // sponge
+    let mut native_sponge = PoseidonSponge::<F>::new(&sponge_params);
+    let mut constraint_sponge = pos_param_var;
+
+    // absorb
+    native_sponge.absorb(&absorb_val);
+    constraint_sponge.absorb(&absorb1_var).unwrap(); // !! should be absorb1_var : FpVar
+
+    let squeeze2 = constraint_sponge.squeeze_field_elements(SIZEOFOUTPUT).unwrap();
+    let outputVar: Vec<_> = output.iter()
+                            .map(|v| FpVar::new_input(ark_relations::ns!(cs, "absorb1"), 
+                            || Ok(*v)).unwrap()).collect();
+    squeeze2.enforce_equal(&outputVar).unwrap();
+    
+    Ok(())
+
+}
+
+pub type PoseidonMpcFunction<F> = PoseidonSponge<F>;
+pub type PoseidonMpcParam<F> = <PoseidonMpcFunction<F> as CryptographicSponge>::Parameters;
+pub type PoseidonMpcInput<F> = Vec<F>;
+pub type PoseidonMpcOutput<F> = Vec<F>;
+
+#[derive(Clone)]
+pub struct PoseidonMpcCircuit<F:Field>
+{
+    pub param: Option<PoseidonMpcParam<F::BasePrimeField>>,
+    pub input: Option<PoseidonMpcInput<F>>,
+    pub output: Option<F>,
+}
+
+impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for PoseidonMpcCircuit<ConstraintF> {
+    fn generate_constraints(
+        self,
+        cs: ConstraintSystemRef<ConstraintF>,
+    ) -> Result<(), SynthesisError> {
+
+        let cs_f = ConstraintSystem::<ConstraintF::BasePrimeField>::new_ref();
+        let pos_param_var = PoseidonSpongeVar::<ConstraintF::BasePrimeField>::new(cs_f.clone(), &self.param.unwrap());
+        //let pos_param_var = PoseidonSpongeVar::<ConstraintF>::new(cs.clone(), &self.param);
+        
+        Ok(())
+    }
+}
+
+#[test]
+fn test_vec() {
+    let mut a = Vec::new();
+
+    a.push(ark_ed_on_bls12_381::Fr::from_be_bytes_mod_order(&[2u8]));
+    println!("A : {:?}", a);
+
+    let mut b = a.pop().unwrap();
+    println!("B : {:?}", b.into_repr().to_bytes_be()[31]);
+
+    let aa = ark_ed_on_bls12_381::Fr::from_be_bytes_mod_order(&[2u8]);
+    let bb = ark_ed_on_bls12_381::Fr::from_be_bytes_mod_order(&[15u8]);
+
+    let cc = aa * bb;
+
+    let c = cc.into_repr().to_bytes_be()[31];
+    println!("C: {:?}", c);
+
+}

@@ -35,3 +35,39 @@ impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for MySillyCircuit<C
         Ok(())
     }
 }
+
+/*
+//====================== zeroknight ===============//
+use ark_sponge::poseidon::{PoseidonSponge};
+use ark_sponge::CryptographicSponge;
+
+pub type PoseidonMpcFunction<F> = PoseidonSponge<F>;
+pub type PoseidonMpcParam<F> = <PoseidonMpcFunction<F> as CryptographicSponge>::Parameters;
+pub type PoseidonMpcInput<F> = Vec<F>;
+pub type PoseidonMpcOutput<F> = Vec<F>;
+
+#[derive(Clone)]
+pub struct PoseidonMpcCircuit<F:Field>
+{
+    pub param: Option<PoseidonMpcParam<F::BasePrimeField>>,
+    pub input: Option<PoseidonMpcInput<F>>,
+    pub output: Option<PoseidonMpcOutput<F>>,
+}
+
+impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for PoseidonMpcCircuit<ConstraintF> {
+    fn generate_constraints(
+        self,
+        cs: ConstraintSystemRef<ConstraintF>,
+    ) -> Result<(), SynthesisError> {
+        Ok(())
+    }
+}
+/*
+impl<F: Field> ConstraintSynthesizer<F> for PoseidonMpcCircuit<F> {
+    fn generate_constraints(self, cs: ConstraintSystemRef<F>) -> Result<(), SynthesisError> {
+        //let pos_param_var = PoseidonSpongeVar::<F>::new(cs.clone(), &self.param);
+        Ok(())
+    }
+}
+*/
+*/
