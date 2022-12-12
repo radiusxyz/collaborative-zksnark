@@ -32,7 +32,7 @@ use ark_bls12_381::Bls12_381;
 
 // Rand instead of ark_std::rand..
 use rand_chacha::ChaCha20Rng;
-use ark_std::{rand::SeedableRng};   // from_seed
+use ark_std::{rand::SeedableRng, test_rng};   // from_seed
 
 // Declare new type
 pub type CRHFunction = PoseidonCRH<Fq, PParams>;
@@ -1348,25 +1348,78 @@ pub type PoseidonMpcInput<F> = Vec<F>;
 pub type PoseidonMpcOutput<F> = Vec<F>;
 
 #[derive(Clone)]
-pub struct PoseidonMpcCircuit<F:Field>
+pub struct PoseidonMpcCircuit<F:PrimeField>
 {
-    pub param: Option<PoseidonMpcParam<F::BasePrimeField>>,
+    pub param: Option<PoseidonMpcParam<F>>,
     pub input: Option<PoseidonMpcInput<F>>,
-    pub output: Option<F>,
+    pub output: Option<PoseidonMpcOutput<F>>,
 }
 
-impl<ConstraintF: Field> ConstraintSynthesizer<ConstraintF> for PoseidonMpcCircuit<ConstraintF> {
+impl<ConstraintF: PrimeField> ConstraintSynthesizer<ConstraintF> for PoseidonMpcCircuit<ConstraintF> {
     fn generate_constraints(
         self,
         cs: ConstraintSystemRef<ConstraintF>,
     ) -> Result<(), SynthesisError> {
 
-        let cs_f = ConstraintSystem::<ConstraintF::BasePrimeField>::new_ref();
-        let pos_param_var = PoseidonSpongeVar::<ConstraintF::BasePrimeField>::new(cs_f.clone(), &self.param.unwrap());
-        //let pos_param_var = PoseidonSpongeVar::<ConstraintF>::new(cs.clone(), &self.param);
+        let rng = &mut test_rng();
+        let sponge_params = poseidon_parameters_for_encryption::<ConstraintF>();
+
+        let mut input = Vec::new();
+        input.push(ConstraintF::rand(rng));
+    
+        //let mut output = Vec::new();
+        //output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
+        let mut output = Vec::new();
+        output.push(ConstraintF::rand(rng));
+
+        let pos_param_var = PoseidonSpongeVar::<ConstraintF>::new(cs.clone(), &sponge_params);
+        let input_var: Vec<_> = input.iter()
+                                .map(|v| {
+                                    FpVar::new_witness(ark_relations::ns!(cs, "input_var"), 
+                                                    || Ok(*v)).unwrap()
+                                }).collect();
         
+        let mut constraint_sponge = pos_param_var;
+        constraint_sponge.absorb(&input_var).unwrap();
+
+        let squeeze = constraint_sponge.squeeze_field_elements(SIZEOFOUTPUT).unwrap();
+
         Ok(())
+
     }
+}
+
+fn poseidon_mpc_circuit_helper<F>(
+    input: PoseidonMpcInput<F>,
+    output: &PoseidonMpcOutput<F>,
+    cs: ConstraintSystemRef<F>,
+    pos_param_var: PoseidonSpongeVar<F> ) -> Result<(), SynthesisError>
+where F:PrimeField,
+{
+    let absorb1 = input.clone();
+    let absrob_val: Vec<u8> = input.iter().map(|t| t.into_repr().to_bytes_be()[31]).collect();
+    let absorb1_var: Vec<_> = absorb1.iter()
+                            .map(|v| {
+                                FpVar::new_witness(ark_relations::ns!(cs,"absorb1"), 
+                                        || Ok(*v)).unwrap()
+                            }).collect();
+    
+    let sponge_params = poseidon_parameters_for_encryption::<F>();
+
+    //sponge
+    let mut native_sponge = PoseidonSponge::<F>::new(&sponge_params);
+    let mut constraint_sponge = pos_param_var;
+    
+    //absorb
+    native_sponge.absorb(&absrob_val);
+    constraint_sponge.absorb(&absorb1_var).unwrap();
+
+    let squeeze2 = constraint_sponge.squeeze_field_elements(SIZEOFOUTPUT).unwrap();
+    let outputVar: Vec<_> = output.iter()
+                            .map(|v| FpVar::new_input(ark_relations::ns!(cs,"absorb1_out"),
+                                    || Ok(*v)).unwrap()).collect();
+
+    Ok(())
 }
 
 #[test]

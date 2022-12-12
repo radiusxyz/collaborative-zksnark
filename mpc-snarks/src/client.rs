@@ -194,7 +194,8 @@ impl Computation {
         let outputs: Vec<MFr> = match self {
             Computation::Groth16 => {
                 //groth::mpc_test_prove_and_verify::<
-                groth::mpc_test_prove_and_verify_on_poseidon_mpc::<
+                //groth::mpc_test_prove_and_verify_on_poseidon::<
+                groth::mpc_test_prove_and_verify_test::<
                     ark_bls12_377::Bls12_377,
                     mpc_algebra::AdditivePairingShare<ark_bls12_377::Bls12_377>,
                 >(1);
