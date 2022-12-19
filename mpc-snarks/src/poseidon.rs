@@ -1387,9 +1387,11 @@ impl<ConstraintF: PrimeField> ConstraintSynthesizer<ConstraintF> for PoseidonMpc
         let value = squeeze.value().unwrap();
         println!("Constraint_sponage : {:?}",value);
 
-        let outputvar: Vec<_> = self.output.unwrap().iter()
+        let outputvar: Vec<_> = self.output.clone().unwrap().iter()
                                 .map(|v| FpVar::new_input(ark_relations::ns!(cs, "absorb1"), 
                                 || Ok(*v)).unwrap()).collect();
+
+        assert_eq!(value, self.output.unwrap());
         
         Ok(())
     }
