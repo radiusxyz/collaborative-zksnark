@@ -98,6 +98,9 @@ where
     let h = R1CStoQAP::witness_map::<<E as PairingEngine>::Fr, D<<E as PairingEngine>::Fr>>(
         cs.clone(),
     )?;
+
+    //println!("h: {:?}", h); //zeroknight
+
     end_timer!(witness_map_time);
     let prover_crypto_time = start_timer!(|| "crypto");
     let c_acc_time = start_timer!(|| "Compute C");

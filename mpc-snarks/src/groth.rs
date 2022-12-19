@@ -1,8 +1,11 @@
+use std::str::FromStr;
+
 use super::silly::MySillyCircuit;
 use ark_crypto_primitives::FixedLengthCRH;
 use ark_ec::PairingEngine;
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, Fp256Parameters, BigInteger256, BigInteger};
 use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proof, ProvingKey, create_random_proof};
+use ark_r1cs_std::fields::fp::FpVar;
 use ark_sponge::poseidon::PoseidonSponge;
 use ark_std::{test_rng, UniformRand};
 use mpc_algebra::*;
@@ -129,7 +132,7 @@ pub fn verify_proof<E: PairingEngine>(
 */
 
 use ark_bls12_381::Fr;
-use ark_sponge::{CryptographicSponge, FieldBasedCryptographicSponge};        // new from PoseidonSponge
+use ark_sponge::{CryptographicSponge, FieldBasedCryptographicSponge, Absorb};        // new from PoseidonSponge
 use ark_sponge::constraints::CryptographicSpongeVar;
 pub fn mpc_test_prove_and_verify_on_poseidon<E: PairingEngine, S: PairingShare<E>>( n_iters: usize) {
 
@@ -208,26 +211,31 @@ pub fn mpc_test_prove_and_verify<E: PairingEngine, S: PairingShare<E>>(n_iters: 
 
 pub fn mpc_test_prove_and_verify_on_poseidon_mpc<E: PairingEngine, S:PairingShare<E>>(n_iters: usize) {
 
-    const INPTEXT:&str = "Input...";
-    const LEN: usize = INPTEXT.len();
-
-    let input = [                           // length : 64 SIZEOFINPUT
-        INPTEXT.as_ref(),
-        [0u8; SIZEOFINPUT - LEN].as_ref(),  
-    ].concat();
-    let mut input_vec = Vec::<E::Fr>::new(); 
-    let inp : Vec<u8> = input.to_vec();
+/*
+    const INPTEXT: &str = "Hello, Radius";
     
-    input_vec = inp.iter().map( |v| E::Fr::from_be_bytes_mod_order(&[*v])).collect();
-
+    let input = INPTEXT.as_bytes().to_vec();
+    
+    let mut field_vec_input = Vec::<ark_bls12_381::Fr>::new();  // Temp with 
+    field_vec_input = input.iter().map(|v| ark_bls12_381::Fr::from(*v)).collect();
+    let mut mpc_field_input = Vec::<E::Fr>::new();
+    mpc_field_input = input.iter().map(|v| E::Fr::from(*v)).collect();
+    
     // elements in this parameter are 'MpcField' // MpcField::<E::Fr, S::FrShare>
     let parameter = poseidon_parameters_for_encryption::<E::Fr>();
-
+    
     let mut native_sponge = PoseidonSponge::<E::Fr>::new(&parameter);
-    native_sponge.absorb(&inp);
+    native_sponge.absorb(&field_vec_input); // code : sponge-src-absorb.rs-186 for Fp256
     let out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
     println!("out = {:?}", out);
 
+    // building a circuit
+    let absorb_var : Vec<_> = mpc_field_input.iter()
+                                .map(|v| {
+                                    FpVar::new_witness(ark_relations::ns!(cs,"absorb"),
+                                    || Ok(*v)).unwrap()
+                                }).collect();
+*/
 /*
     // circuit is not implemented based on Field which needs for MpcField
     // build the circuit
@@ -248,8 +256,8 @@ pub fn mpc_test_prove_and_verify_on_poseidon_mpc<E: PairingEngine, S:PairingShar
     let proof = mpc_proof.reveal();
     
     assert!(verify_proof(&pvk, &proof, &[]).unwrap());
-    
-*/
+*/    
+
 }
 
 pub fn mpc_test_prove_and_verify_test<E: PairingEngine, S: PairingShare<E>>(n_iters: usize) {
@@ -262,16 +270,40 @@ pub fn mpc_test_prove_and_verify_test<E: PairingEngine, S: PairingShare<E>>(n_it
     //let mut output = Vec::new();
     //output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
     let mut output = Vec::new();
-    output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
+    //output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
 
     let parameter = poseidon_parameters_for_encryption::<MpcField::<E::Fr, S::FrShare>>();
+
+    // parameters,input,output for Setup
+    let parameter_e = poseidon_parameters_for_encryption::<E::Fr>();
+    let mut setup_input = Vec::new();
+    setup_input.push(E::Fr::rand(rng));
+    let mut setup_output = Vec::new();
+    setup_output.push(E::Fr::rand(rng));
+
+
+    // calculate hash of the input
+    let mut native_sponge = PoseidonSponge::<E::Fr>::new(&parameter_e);
+    let mut input_val : E::Fr = input[0].unwrap_as_public();
+    let repr = input_val.into_repr().to_bytes_be();
+    let mut repr2 = ark_bls12_377::Fr::from_be_bytes_mod_order(repr.as_slice());
+    native_sponge.absorb(&repr2);
+    let native_out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+    output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
+
+    output = native_out.iter().map(|v| {
+        //MpcField::<E::Fr, S::FrShare>::Public(*v)
+        MpcField::<E::Fr, S::FrShare>::Shared(S::FrShare::from_public(*v))  // if it's Public, an error occurs.
+    }).collect();
+
+//    MpcField::<E::Fr, S::FrShare>::Public(native_out);
 
     let params = 
         generate_random_parameters::<E, _,_>(
             PoseidonMpcCircuit{
-                param: None, 
-                input:None, 
-                output:None}, rng).unwrap();
+                param: Some(parameter_e), 
+                input: Some(setup_input), 
+                output: Some(setup_output)}, rng).unwrap();
 
     let pvk = prepare_verifying_key::<E>(&params.vk);
     let mpc_params = ProvingKey::from_public(params);
@@ -289,6 +321,8 @@ pub fn mpc_test_prove_and_verify_test<E: PairingEngine, S: PairingShare<E>>(n_it
     let proof = mpc_proof.reveal();
     let pub_out = output.reveal();
 
+    println!("proof : {:?}", proof);
+    println!("public output : {:?}", pub_out);
     //assert!(verify_proof(&pvk, &proof, pub_out.as_slice()).unwrap());
     
 }
@@ -321,5 +355,30 @@ fn test_poseidon_with_primefield() {
     let out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
 
     println!("Output : {:?}", out);
+
+}
+
+use mpc_algebra::MpcField;
+
+#[test]
+fn test_integrity_check_on_mpcfield() {
+    type E = ark_bls12_381::Bls12_381;
+    type S = mpc_algebra::AdditivePairingShare<ark_bls12_381::Bls12_381>;
+    // ark_bls12_377::Bls12_377, mpc_algebra::AdditivePairingShare<ark_bls12_377::Bls12_377>,
+    let mpc = MpcField::<<E as PairingEngine>::Fr, <S as PairingShare<E>>::FrShare>::from(2u8);
+    let mpc_unwrap = mpc.unwrap_as_public();
+    let mpc_into = mpc.into_repr();
+    let mpc_from = ark_bls12_381::Fr::from_repr(mpc_into.clone());
+    println!("mpc_unwrap: {:?}", mpc_unwrap);
+    println!("mpc_into: {:?}", mpc_into);
+    println!("mpc_from: {:?}", mpc_from);
+
+    //
+    let value = ark_bls12_381::Fr::from(2u8);
+    println!("value_unwrap: {:?}", value);
+
+    //
+    let value2 = ark_bls12_381::Fr::from_le_bytes_mod_order(&[2u8]);
+    println!("value2_unwrap: {:?}", value2);
 
 }

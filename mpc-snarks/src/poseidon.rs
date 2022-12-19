@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use ark_crypto_primitives::{
     crh::{poseidon::{PoseidonCRH, Poseidon, PoseidonRoundParams}, bowe_hopwood::CRH},
     crh::poseidon::sbox::PoseidonSbox,
@@ -30,6 +32,7 @@ use ark_groth16::{generate_random_parameters, prepare_verifying_key, verify_proo
 use ark_bls12_381::Bls12_381;
 
 
+use mpc_algebra::Reveal;
 // Rand instead of ark_std::rand..
 use rand_chacha::ChaCha20Rng;
 use ark_std::{rand::SeedableRng, test_rng};   // from_seed
@@ -452,7 +455,7 @@ fn test_poseidon_evaluate() {
 
 // added by zeroknight : test Poseidon..
 
-use ark_sponge::poseidon::{PoseidonParameters, PoseidonSponge};
+use ark_sponge::{poseidon::{PoseidonParameters, PoseidonSponge}, FieldBasedCryptographicSponge};
 use ark_sponge::poseidon::constraints::PoseidonSpongeVar;
 use ark_sponge::CryptographicSponge;        // new from PoseidonSponge
 use ark_sponge::constraints::CryptographicSpongeVar;
@@ -1361,31 +1364,34 @@ impl<ConstraintF: PrimeField> ConstraintSynthesizer<ConstraintF> for PoseidonMpc
         cs: ConstraintSystemRef<ConstraintF>,
     ) -> Result<(), SynthesisError> {
 
-        let rng = &mut test_rng();
-        let sponge_params = poseidon_parameters_for_encryption::<ConstraintF>();
-
-        let mut input = Vec::new();
-        input.push(ConstraintF::rand(rng));
-    
-        //let mut output = Vec::new();
-        //output.push(MpcField::<E::Fr, S::FrShare>::rand(rng));
-        let mut output = Vec::new();
-        output.push(ConstraintF::rand(rng));
-
-        let pos_param_var = PoseidonSpongeVar::<ConstraintF>::new(cs.clone(), &sponge_params);
-        let input_var: Vec<_> = input.iter()
+        //let input_field_val = self.input.clone().unwrap();
+        //let input_val : Vec<u8> = self.input.clone().unwrap()
+        //                                    .iter().map(|t| t.into_repr().to_bytes_be()[31]).collect();
+        
+        let pos_param_var = PoseidonSpongeVar::<ConstraintF>::new(cs.clone(), &self.param.unwrap());
+        let input_var: Vec<_> = self.input.unwrap().iter()
                                 .map(|v| {
                                     FpVar::new_witness(ark_relations::ns!(cs, "input_var"), 
                                                     || Ok(*v)).unwrap()
                                 }).collect();
         
+        let sponge_params = poseidon_parameters_for_encryption::<ConstraintF>();
+        
+        let mut native_sponge = PoseidonSponge::<ConstraintF>::new(&sponge_params);
         let mut constraint_sponge = pos_param_var;
+        
+        //native_sponge.absorb(&input_field_val);
         constraint_sponge.absorb(&input_var).unwrap();
-
         let squeeze = constraint_sponge.squeeze_field_elements(SIZEOFOUTPUT).unwrap();
+        
+        let value = squeeze.value().unwrap();
+        println!("Constraint_sponage : {:?}",value);
 
+        let outputvar: Vec<_> = self.output.unwrap().iter()
+                                .map(|v| FpVar::new_input(ark_relations::ns!(cs, "absorb1"), 
+                                || Ok(*v)).unwrap()).collect();
+        
         Ok(())
-
     }
 }
 
@@ -1439,5 +1445,57 @@ fn test_vec() {
 
     let c = cc.into_repr().to_bytes_be()[31];
     println!("C: {:?}", c);
+
+}
+
+#[test]
+fn test_poseidon_hash() {
+
+    type baseFr = ark_bls12_381::Fr;
+
+    const INPTEXT: &str = "Hello, Radius";
+    
+    let input = INPTEXT.as_bytes().to_vec();
+    
+    let mut field_vec_input : Vec::<baseFr> = input.iter().map(|v| baseFr::from(*v)).collect();
+    println!("input_u8: {:?}", input);
+    println!("field_vec: {:?}", field_vec_input);
+
+    
+    // using native ark_bls12_381
+    let parameter = poseidon_parameters_for_encryption::<baseFr>();
+    let mut native_sponge = PoseidonSponge::<baseFr>::new(&parameter);
+    native_sponge.absorb(&field_vec_input);
+    let native_out = native_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+    println!("parameter 1st in ark : {:?}", parameter.ark[0][0]);
+    println!("native_out : {:?}", native_out);
+
+    // using MpcField <- currently panicking!!
+    use mpc_algebra::wire::MpcField;
+    use mpc_algebra::PairingShare;
+    use ark_ec::PairingEngine;
+    type pengine = ark_bls12_381::Bls12_381; // PairingEngine
+    type sharing = mpc_algebra::AdditivePairingShare<ark_bls12_381::Bls12_381>;
+
+/*
+    let mpc_parameter = poseidon_parameters_for_encryption::< MpcField::<<pengine as PairingEngine>::Fr, <sharing as PairingShare<pengine>>::FrShare>>();
+    let mut mpc_sponge = PoseidonSponge::< MpcField::<<pengine as PairingEngine>::Fr, <sharing as PairingShare<pengine>>::FrShare>>::new(&mpc_parameter);
+    mpc_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+    let mpc_out = mpc_sponge.squeeze_native_field_elements(SIZEOFOUTPUT);
+    println!("[mpc] parameter 1st in ark : {:?}", mpc_parameter.ark[0][0]);
+    println!("[mpc] mpc_out : {:?}", mpc_out);
+*/
+
+    let rng = &mut test_rng();
+    let test1 = MpcField::<<pengine as PairingEngine>::Fr, <sharing as PairingShare<pengine>>::FrShare>::rand(rng);
+    let input_test1 = test1.unwrap_as_public();
+    println!("input_test1: {:?}", input_test1);
+
+    let rep = input_test1.into_repr().to_bytes_be();
+    println!("rep: {:?}", rep);
+
+    let mut repr2 = ark_bls12_381::Fr::from_be_bytes_mod_order(rep.as_slice());
+    println!("repr2: {:?}", repr2);
+
 
 }
